@@ -1,0 +1,2781 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>SAP Reclassifier</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f5f5f4;color:#1c1917;display:flex;height:100vh;overflow:hidden;font-size:13px}
+::-webkit-scrollbar{width:5px;height:5px}::-webkit-scrollbar-thumb{background:#d6d3d1;border-radius:9px}
+/* SIDEBAR */
+#sb{width:200px;flex-shrink:0;background:#fff;border-right:1px solid #e7e5e4;display:flex;flex-direction:column;height:100vh;transition:width .2s;overflow:hidden}
+#sb.col{width:44px}
+#sb-top{padding:8px 10px;border-bottom:1px solid #e7e5e4;display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+#sb-logo{overflow:hidden;flex:1;min-width:0}
+#sb-logo h1{font-size:12px;font-weight:700;color:#312e81;white-space:nowrap;transition:opacity .15s}
+#sb-logo p{font-size:10px;color:#a8a29e;white-space:nowrap;transition:opacity .15s}
+#sb.col #sb-logo h1,#sb.col #sb-logo p{opacity:0}
+#sb-tog{background:none;border:none;cursor:pointer;padding:4px 6px;border-radius:6px;color:#78716c;font-size:14px;flex-shrink:0;line-height:1;margin-left:4px}
+#sb-tog:hover{background:#f5f5f4}
+#sb-nav{padding:6px;flex:1;overflow-y:auto;overflow-x:hidden}
+.nav-btn{width:100%;display:flex;align-items:center;gap:8px;padding:8px 10px;border:none;background:none;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer;color:#78716c;text-align:left;margin-bottom:2px;transition:background .12s;white-space:nowrap;overflow:hidden}
+.nav-btn:hover{background:#f5f5f4;color:#1c1917}
+.nav-btn.on{background:#eef2ff;color:#4338ca}
+.nav-ic{font-size:16px;width:22px;flex-shrink:0;text-align:center}
+.nav-lbl{transition:opacity .15s,width .2s;overflow:hidden}
+#sb.col .nav-lbl{opacity:0;width:0;pointer-events:none}
+#sb.col .nav-btn{justify-content:center;padding:9px 0}
+/* MAIN */
+#main{flex:1;overflow-y:auto;height:100vh;padding:12px 18px}
+.pg{display:none;width:100%}.pg.on{display:block}
+/* TYPOGRAPHY */
+.h1{font-size:21px;font-weight:700;letter-spacing:-.3px}
+.sub{font-size:13px;color:#78716c;margin-top:3px}
+.row{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;gap:12px;flex-wrap:wrap}
+/* CARDS */
+.card{background:#fff;border:1px solid #e7e5e4;border-radius:14px;overflow:hidden;margin-bottom:16px}
+.card-hd{padding:11px 18px;background:#fafaf9;border-bottom:1px solid #e7e5e4;font-size:13px;font-weight:600;display:flex;align-items:center;justify-content:space-between;gap:8px}
+.card-bd{padding:18px}
+/* BUTTONS */
+.btn{display:inline-flex;align-items:center;gap:5px;padding:7px 14px;border-radius:9px;font-size:12px;font-weight:500;cursor:pointer;border:none;transition:all .12s;white-space:nowrap}
+.btn-pri{background:#4f46e5;color:#fff}.btn-pri:hover{background:#4338ca}
+.btn-sec{background:#fff;color:#44403c;border:1px solid #d6d3d1}.btn-sec:hover{background:#fafaf9}
+.btn-del{background:#fef2f2;color:#dc2626;border:1px solid #fecaca}
+.btn-sm{padding:4px 10px;font-size:11px;border-radius:7px}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+/* INPUTS */
+input,select{padding:7px 10px;border:1px solid #d6d3d1;border-radius:8px;font-size:12px;outline:none;background:#fff;width:100%}
+input:focus,select:focus{border-color:#6366f1;box-shadow:0 0 0 2px #e0e7ff}
+/* ALERTS */
+.alert{padding:10px 14px;border-radius:9px;font-size:12px;margin-bottom:10px;line-height:1.5}
+.ok{background:#f0fdf4;border:1px solid #bbf7d0;color:#166534}
+.err{background:#fef2f2;border:1px solid #fecaca;color:#991b1b}
+.info{background:#eff6ff;border:1px solid #bfdbfe;color:#1e40af}
+.warn{background:#fffbeb;border:1px solid #fde68a;color:#92400e}
+/* STATS GRID */
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:18px}
+.stat{background:#fff;border:1px solid #e7e5e4;border-radius:12px;padding:13px 15px}
+.stat-l{font-size:11px;color:#a8a29e;margin-bottom:4px}
+.stat-v{font-size:21px;font-weight:700;font-family:monospace}
+/* UPLOAD */
+.upz{border:2px dashed #d6d3d1;border-radius:12px;padding:28px;text-align:center;cursor:pointer;transition:all .15s;margin-bottom:10px}
+.upz:hover{border-color:#6366f1;background:#eef2ff}
+/* TABS */
+.tabs{display:flex;gap:3px;padding:3px;background:#f5f5f4;border-radius:9px;margin-bottom:14px}
+.tab{flex:1;padding:6px 10px;border:none;background:none;border-radius:7px;font-size:12px;font-weight:500;cursor:pointer;color:#78716c;transition:all .12s}
+.tab.on{background:#fff;color:#4338ca;box-shadow:0 1px 3px rgba(0,0,0,.1)}
+/* TABLE generic */
+.tbl{width:100%;border-collapse:collapse;font-size:12px}
+.tbl th{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:#78716c;background:#fafaf9;padding:8px 10px;text-align:left;border-bottom:1px solid #e7e5e4}
+.tbl td{padding:6px 10px;border-bottom:1px solid #f5f5f4}
+.tbl tr:hover td{background:#fafaf9}
+.mono{font-family:'SF Mono',Consolas,monospace;font-size:11px}
+/* STRUCT TREE */
+.sg{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.sbox{border:1px solid #e7e5e4;border-radius:12px;overflow:hidden;height:600px;display:flex;flex-direction:column}
+.sbox-hd{padding:10px 14px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;border-bottom:1px solid #e7e5e4}
+.sbox-add{display:flex;gap:6px;padding:8px 10px;border-bottom:1px solid #e7e5e4;flex-shrink:0}
+.sbox-bd{flex:1;overflow-y:auto}
+.sn{border-bottom:1px solid #f5f5f4}
+.sr{display:flex;align-items:center;padding:5px 8px;gap:4px}
+.sr:hover{background:#fafaf9}
+.sr:hover .sa{display:flex}
+.sa{display:none;gap:2px;flex-shrink:0}
+.ib{background:none;border:none;cursor:pointer;padding:2px 4px;border-radius:4px;font-size:12px}
+.ib:hover{background:#e7e5e4}
+/* MAPPING TABLE */
+.mt{border:1px solid #e7e5e4;border-radius:12px;overflow:hidden}
+.mh,.mr{display:grid;grid-template-columns:22px 90px 1fr 130px 130px 130px 130px;align-items:center}
+.mh{background:#fafaf9;border-bottom:1px solid #e7e5e4;font-size:10px;font-weight:600;text-transform:uppercase;color:#78716c}
+.mh>div,.mr>div{padding:6px 8px}
+.mr{border-bottom:1px solid #f5f5f4}
+.mr:hover>div{background:#fafaf9}
+.mb{max-height:calc(100vh - 360px);overflow-y:auto}
+/* SELECT DROPDOWN */
+.sw{position:relative}
+.sb2{width:100%;padding:3px 7px;border:1px solid #d6d3d1;border-radius:6px;font-size:11px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;background:#fff;text-align:left;gap:3px}
+.sb2.cv{background:#f0fdf4;border-color:#86efac;color:#14532d}
+.sd{position:absolute;z-index:300;top:calc(100% + 2px);left:0;min-width:280px;background:#fff;border:1px solid #e7e5e4;border-radius:10px;box-shadow:0 8px 30px rgba(0,0,0,.15);overflow:hidden}
+.sd input{width:100%;padding:7px 9px;border:none;border-bottom:1px solid #f5f5f4;font-size:11px;outline:none}
+.sl{max-height:220px;overflow-y:auto;padding:3px}
+.so{padding:5px 9px;border-radius:5px;cursor:pointer;font-size:11px;display:flex;align-items:center;gap:5px}
+.so:hover{background:#f5f5f4}
+.so.sel{background:#dcfce7;color:#14532d}
+.print-header{display:none}
+.print-header h2{font-size:15px;font-weight:700;margin:0 0 2px 0;color:#1e3a6e}
+.print-header p{font-size:11px;color:#64748b;margin:0}
+.print-header hr{border:none;border-top:1px solid #bfdbfe;margin:6px 0 10px 0}
+/* REPORT */
+.rpt-tbl{width:100%;border-collapse:collapse;font-size:14px}
+.rpt-tbl th{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:#6b7280;padding:7px 12px;background:#f8f8f7;border-bottom:2px solid #e2e8f0;white-space:nowrap;text-align:right;position:sticky;top:0;z-index:2;font-weight:600}
+.rpt-tbl th:first-child,.rpt-tbl th:nth-child(2){text-align:left}
+.rpt-tbl td{padding:4px 12px;border-bottom:1px solid #f1f5f9;text-align:right;white-space:nowrap}
+.rpt-tbl td:first-child{text-align:left;white-space:nowrap}
+.rpt-tbl td:nth-child(2){text-align:left}
+
+/* LV0 — SEZIONE: nessuno sfondo, solo separatore e bordo sinistro blu */
+.r-sec>td{
+  background:#fff;
+  color:#0f172a;
+  font-weight:800;
+  font-size:16px;
+  border-top:2px solid #3b82f6;
+  border-bottom:1px solid #e2e8f0;
+  padding-top:9px;
+  padding-bottom:9px;
+}
+.r-sec>td:first-child{border-left:4px solid #3b82f6;padding-left:10px}
+.r-sec:hover>td{background:#f0f7ff!important}
+
+/* LV1 — GRUPPO: sfondo grigio leggerissimo, corsivo, bordo sinistra blu chiaro */
+.r-grp>td{
+  background:#f8fafc;
+  color:#1e293b;
+  font-weight:600;
+  font-style:italic;
+  font-size:14px;
+  border-bottom:1px solid #e2e8f0;
+}
+.r-grp>td:first-child{border-left:3px solid #93c5fd;padding-left:10px}
+.r-grp:hover>td{background:#eff6ff!important}
+
+/* LV2 — NODO: bianco, testo medio, bordo sinistra grigio */
+.r-nod>td{
+  background:#fff;
+  color:#334155;
+  font-weight:500;
+  font-size:12px;
+  border-bottom:1px solid #f1f5f9;
+}
+.r-nod>td:first-child{border-left:2px solid #cbd5e1;padding-left:10px}
+.r-nod:hover>td{background:#f8fafc!important}
+
+/* CONTO ANALITICO: testo piccolo, grigio, nessun bordo */
+.r-acc>td{
+  background:#fff;
+  color:#111827;
+  font-size:10px;
+  font-weight:400;
+  border-bottom:none;
+}
+.r-acc:hover>td{background:#f8fafc!important}
+
+/* TOTALI UTILE */
+.r-utile-ai>td{
+  background:#fff;
+  color:#0369a1;
+  font-weight:700;
+  font-style:italic;
+  font-size:14px;
+  border-top:2px solid #bae6fd;
+  border-bottom:1px solid #e0f2fe;
+  padding-top:7px;padding-bottom:7px;
+}
+.r-utile-ai>td:first-child{border-left:4px solid #38bdf8;padding-left:10px}
+.r-utile-ai:hover>td{background:#f0f9ff!important}
+
+.r-utile-netto>td{
+  background:#fff;
+  color:#0f172a;
+  font-weight:800;
+  font-size:16px;
+  border-top:2px solid #3b82f6;
+  border-bottom:2px solid #3b82f6;
+  padding-top:9px;padding-bottom:9px;
+}
+.r-utile-netto>td:first-child{border-left:4px solid #1d4ed8;padding-left:10px}
+.r-utile-netto:hover>td{background:#f0f7ff!important}
+
+/* NUMERI: nero=dare, rosso=avere */
+.neg{color:#dc2626!important;font-style:normal}
+.pos{color:#111827!important}
+.zero{color:#9ca3af!important}
+/* PROGRESS */
+.bar{height:5px;background:#e7e5e4;border-radius:99px;overflow:hidden;margin:4px 0}
+.bar-f{height:100%;border-radius:99px}
+/* TOGGLE BTN active/inactive — due classi esplicite, nessun !important trick */
+.btn-on{background:#4338ca;color:#fff;border:1px solid #4338ca}
+.btn-on:hover{background:#3730a3;border-color:#3730a3}
+.btn-off{background:#fff;color:#44403c;border:1px solid #d6d3d1}
+.btn-off:hover{background:#fafaf9}
+/* REPORT page full width */
+#pg-report{max-width:none!important;padding:0!important}
+/* REPORT outer: occupa tutto lo schermo meno il padding del main */
+#rpt-outer{display:flex;flex-direction:column;height:calc(100vh - 32px);gap:6px}
+#rpt-controls{flex-shrink:0;padding:8px 0 0 0}
+#rpt-kpi-wrap{flex-shrink:0}
+#rpt-scroll{flex:1;min-height:0;overflow:auto;border:1px solid #e7e5e4;border-radius:10px}
+#rpt-tbl{border-collapse:collapse}
+/* Sticky col shadow */
+#rpt-tbl td:nth-child(2)[style*="sticky"],
+#rpt-tbl th:nth-child(2)[style*="sticky"]{box-shadow:3px 0 6px -2px rgba(0,0,0,.12)}
+/* Row background vars */
+.r-sec{--row-bg:#e0f2fe}
+.r-grp{--row-bg:#f0f9ff}
+.r-nod{--row-bg:#fff}
+.r-acc{--row-bg:#fafaf9}
+tr:hover{--row-bg:#fef9c3!important}
+/* Collasso: .r-hidden nasconde una riga */
+.r-hidden{display:none!important}
+/* Cursore sui nodi con figli */
+.r-has-kids>td:nth-child(2){cursor:pointer}
+.r-has-kids:hover>td{background:rgba(99,102,241,.05)!important}
+/* PRINT */
+@media print{
+  .print-header{display:block!important}
+  #sb,#rpt-controls,#rpt-kpi-wrap,.no-print{display:none!important}
+  #main{padding:4px!important;height:auto!important;overflow:visible!important}
+  #pg-report,#rpt-outer{height:auto!important;display:block!important}
+  #rpt-scroll{overflow:visible!important;height:auto!important;border:none!important}
+  .rpt-tbl td,.rpt-tbl th{font-size:8px!important;padding:2px 5px!important}
+  .neg{color:#c00!important}
+  .pos{color:#000!important}
+  .r-sec>td{border-top:2px solid #3b82f6!important;font-weight:800!important}
+  .r-grp>td{background:#f8fafc!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .r-utile-netto>td{border-top:2px solid #000!important;font-weight:800!important}
+  @page{margin:.8cm;size:landscape}
+}
+#sb.#sb-io{padding:10px 8px;border-top:1px solid #e7e5e4;display:flex;flex-direction:column;gap:6px;flex-shrink:0;margin-top:auto}
+#sb.col #sb-io{display:none}
+.hidden{display:none}
+.note-cell input{transition:border-color .15s}
+.note-cell input:focus{outline:none;border-color:#3b82f6!important;background:#fff!important}
+@media print{.note-cell{display:none!important}}
+</style>
+<!-- Firebase SDK -->
+<script type="module" id="fb-module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getFirestore, doc, getDoc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject, listAll } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js";
+
+const _fbConfig = {
+  apiKey: "AIzaSyB4wW9n5kkPq2TkaYjFxWZxzrNHOUft0sI",
+  authDomain: "sap-reclassifier.firebaseapp.com",
+  projectId: "sap-reclassifier",
+  storageBucket: "sap-reclassifier.firebasestorage.app",
+  messagingSenderId: "222721257428",
+  appId: "1:222721257428:web:87bbeb7b66ed740b813041"
+};
+
+const _fbApp  = initializeApp(_fbConfig);
+const _db     = getFirestore(_fbApp);
+const _docRef = doc(_db, 'state', 'main');
+
+// Esponi funzioni al contesto globale
+window._fbSave = async (data) => {
+  try {
+    await setDoc(_docRef, { payload: JSON.stringify(data), ts: Date.now() });
+    window._fbSetStatus('sync');
+  } catch(e) {
+    console.error('Firebase save error:', e);
+    window._fbSetStatus('err');
+  }
+};
+
+window._fbLoad = async () => {
+  try {
+    const snap = await getDoc(_docRef);
+    if (snap.exists()) {
+      const raw = snap.data().payload;
+      return raw ? JSON.parse(raw) : null;
+    }
+    return null;
+  } catch(e) {
+    console.error('Firebase load error:', e);
+    return null;
+  }
+};
+
+// Listener real-time: aggiorna se cambia da altro dispositivo
+let _fbIgnoreNext = false;
+onSnapshot(_docRef, (snap) => {
+  if (!snap.exists()) return;
+  if (_fbIgnoreNext) { _fbIgnoreNext = false; return; }
+  try {
+    const remote = JSON.parse(snap.data().payload || '{}');
+    const localTs  = parseInt(localStorage.getItem('saprec5_ts') || '0');
+    const remoteTs = snap.data().ts || 0;
+    if (remoteTs > localTs + 3000) { // remoto più recente di 3s
+      window._fbMergeRemote(remote);
+      window._fbSetStatus('synced');
+    }
+  } catch(e) {}
+});
+
+const _storage = getStorage(_fbApp);
+
+// Upload PDF attachment for a recon key
+window._fbUploadPDF = async (reconKey, file) => {
+  const safeName = Date.now() + '_' + file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+  const path = `attachments/${reconKey}/${safeName}`;
+  const storageRef = ref(_storage, path);
+  await uploadBytes(storageRef, file, { contentType: 'application/pdf' });
+  const url = await getDownloadURL(storageRef);
+  return { name: file.name, path, url, uploadedAt: Date.now() };
+};
+
+// Delete a PDF attachment
+window._fbDeletePDF = async (path) => {
+  const storageRef = ref(_storage, path);
+  await deleteObject(storageRef);
+};
+
+// List attachments for a recon key (from Firestore metadata)
+window._fbGetAttachments = async (reconKey) => {
+  try {
+    const d = await getDoc(doc(_db, 'attachments', reconKey.replace(/[^a-zA-Z0-9_-]/g, '_')));
+    return d.exists() ? (d.data().files || []) : [];
+  } catch { return []; }
+};
+
+// Save attachment metadata to Firestore
+window._fbSaveAttachments = async (reconKey, files) => {
+  const safeKey = reconKey.replace(/[^a-zA-Z0-9_-]/g, '_');
+  await setDoc(doc(_db, 'attachments', safeKey), { files, updatedAt: Date.now() });
+};
+
+window._fbReady = true;
+window.dispatchEvent(new Event('fb-ready'));
+</script>
+</head>
+<body>
+
+<div id="sb">
+  <div id="sb-top">
+  <div style="text-align:right;padding:4px 8px 0"><span id="fb-status" title="Firebase sync" style="font-size:14px;cursor:default">⏳</span></div>
+    <div id="sb-logo"><h1>SAP Reclassifier</h1><p id="sb-co">—</p></div>
+    <button id="sb-tog" onclick="toggleSB()" title="Comprimi/Espandi">◀</button>
+  </div>
+  <nav id="sb-nav"></nav>
+  <div id="sb-io">
+    <button class="btn btn-sm btn-off" onclick="exportState()" style="width:100%;justify-content:center;font-size:11px">💾 Esporta stato</button>
+    <label class="btn btn-sm btn-off" style="width:100%;justify-content:center;font-size:11px;cursor:pointer;text-align:center">
+      📂 Importa stato<input type="file" accept=".json" onchange="importState(this)" style="display:none">
+    </label>
+  </div>
+</div>
+
+<div id="main">
+  <div class="pg" id="pg-dash"></div>
+  <div class="pg" id="pg-import"></div>
+  <div class="pg" id="pg-struct"></div>
+  <div class="pg" id="pg-map"></div>
+  <div class="pg" id="pg-report"></div>
+  <div class="pg" id="pg-recon"></div>
+</div>
+
+<script>
+// ══════════════════════════════════════════════════════════
+// XLSX PARSER (zero dipendenze, usa API browser native)
+// ══════════════════════════════════════════════════════════
+const XLSX = (() => {
+  async function unzip(ab) {
+    const v = new DataView(ab), files = {};
+    let eo = -1;
+    for (let i = ab.byteLength - 22; i >= 0; i--) {
+      if (v.getUint32(i, true) === 0x06054b50) { eo = i; break; }
+    }
+    if (eo < 0) throw new Error('Not a zip');
+    const csz = v.getUint32(eo + 12, true), cst = v.getUint32(eo + 16, true);
+    let p = cst;
+    while (p < cst + csz) {
+      if (v.getUint32(p, true) !== 0x02014b50) break;
+      const method = v.getUint16(p + 10, true);
+      const csz2   = v.getUint32(p + 20, true);
+      const usz    = v.getUint32(p + 24, true);
+      const fnl    = v.getUint16(p + 28, true);
+      const exl    = v.getUint16(p + 30, true);
+      const cml    = v.getUint16(p + 32, true);
+      const lho    = v.getUint32(p + 42, true);
+      const name   = new TextDecoder().decode(new Uint8Array(ab, p + 46, fnl));
+      p += 46 + fnl + exl + cml;
+      const lhex = v.getUint16(lho + 28, true);
+      const ds   = lho + 30 + fnl + lhex;
+      const cd   = new Uint8Array(ab, ds, csz2);
+      if (method === 0) { files[name] = cd.slice(); }
+      else if (method === 8) {
+        try {
+          const s = new DecompressionStream('deflate-raw');
+          const w = s.writable.getWriter(); w.write(cd); w.close();
+          const chunks = []; const r = s.readable.getReader();
+          while (true) { const {done,value} = await r.read(); if(done)break; chunks.push(value); }
+          const out = new Uint8Array(usz); let off = 0;
+          for (const c of chunks) { out.set(c, off); off += c.length; }
+          files[name] = out;
+        } catch { files[name] = cd; }
+      }
+    }
+    return files;
+  }
+
+  function xml(b) { return new DOMParser().parseFromString(new TextDecoder().decode(b),'application/xml'); }
+  function col(ref) { const m=ref.match(/^([A-Z]+)/); if(!m)return 0; let n=0; for(const c of m[1]) n=n*26+c.charCodeAt(0)-64; return n-1; }
+  function row(ref) { const m=ref.match(/(\d+)$/); return m?parseInt(m[1])-1:0; }
+
+  async function read(ab) {
+    const zip = await unzip(ab);
+    const sst = {};
+    if (zip['xl/sharedStrings.xml']) {
+      xml(zip['xl/sharedStrings.xml']).querySelectorAll('si').forEach((si,i)=>{
+        sst[i] = [...si.querySelectorAll('t')].map(t=>t.textContent).join('');
+      });
+    }
+    const wbDoc = xml(zip['xl/workbook.xml']);
+    const sheets = [...wbDoc.querySelectorAll('sheet')].map(s=>({
+      name: s.getAttribute('name'), id: s.getAttribute('r:id')||s.getAttribute('id')
+    }));
+    const rels = {};
+    if (zip['xl/_rels/workbook.xml.rels']) {
+      xml(zip['xl/_rels/workbook.xml.rels']).querySelectorAll('Relationship').forEach(r=>{
+        rels[r.getAttribute('Id')] = r.getAttribute('Target');
+      });
+    }
+    const result = { SheetNames: sheets.map(s=>s.name), Sheets: {} };
+    for (const sh of sheets) {
+      const tgt = rels[sh.id] || `worksheets/sheet${sheets.indexOf(sh)+1}.xml`;
+      const path = tgt.startsWith('/') ? tgt.slice(1) : `xl/${tgt}`;
+      if (!zip[path]) continue;
+      const rs = {};
+      xml(zip[path]).querySelectorAll('c').forEach(c=>{
+        const ref = c.getAttribute('r'); if(!ref) return;
+        const ri = row(ref), ci = col(ref), t = c.getAttribute('t');
+        const vEl = c.querySelector('v'); if(!vEl) return;
+        let val = vEl.textContent;
+        if (t==='s') val = sst[parseInt(val)]??'';
+        else if (t==='b') val = val==='1';
+        else if (!t||t==='n') { const n=parseFloat(val); if(!isNaN(n)) val=n; }
+        if (!rs[ri]) rs[ri]=[];
+        rs[ri][ci] = val;
+      });
+      const mx = Math.max(-1,...Object.keys(rs).map(Number));
+      const data = [];
+      for (let i=0;i<=mx;i++) data.push(rs[i]||[]);
+      result.Sheets[sh.name] = data;
+    }
+    return result;
+  }
+  return { read };
+})();
+
+// ══════════════════════════════════════════════════════════
+// CSV PARSER (separatore ; o ,  — gestisce BOM)
+// ══════════════════════════════════════════════════════════
+function parseCSV(text) {
+  if (text.charCodeAt(0)===0xFEFF) text=text.slice(1);
+  const lines = text.replace(/\r\n/g,'\n').replace(/\r/g,'\n').split('\n').filter(l=>l.trim());
+  if (!lines.length) return [];
+  const sep = lines[0].split(';').length > lines[0].split(',').length ? ';' : ',';
+  return lines.map(line=>{
+    const cols=[]; let cur='', inQ=false;
+    for (const ch of line) {
+      if (ch==='"') inQ=!inQ;
+      else if (ch===sep&&!inQ) { cols.push(cur.trim()); cur=''; }
+      else cur+=ch;
+    }
+    cols.push(cur.trim());
+    return cols;
+  });
+}
+
+// ══════════════════════════════════════════════════════════
+// STATE
+// ══════════════════════════════════════════════════════════
+const SK = 'saprec5';
+const BLANK = {
+  // Piano dei conti: [{id, name}]
+  coa: [],
+  // Strutture: [{id, name, parentId}]
+  civile: [],
+  corporate: [],
+  // Mapping: {accountId: {civ, corp}}  — valore = ID nodo struttura
+  mapping: {},
+  // Bilanci caricati: [{period, dateFrom, dateTo, company,
+  //                     rows: [{id, ini, fin}]}]
+  bilanci: [],
+  notes: {},
+  recon: {},
+};
+
+// File handles per auto-reload (File System Access API) — non persistono in localStorage
+const _fileHandles = new Map(); // key: period string → FileSystemFileHandle
+let _folderHandle = null;        // DirectoryHandle cartella SAP
+let _folderName   = null;        // nome cartella per UI
+
+let S = (() => {
+  try { const s=JSON.parse(localStorage.getItem(SK)); return s?{...BLANK,...s}:{...BLANK}; }
+  catch { return {...BLANK}; }
+})();
+
+// Carica da Firebase appena pronto (sovrascrive localStorage se Firebase è più recente)
+async function _fbInit() {
+  if (!window._fbLoad) return;
+  try {
+    _fbSetStatus('saving');
+    const remote = await window._fbLoad();
+    if (!remote) { _fbSetStatus('sync'); return; }
+    const localTs  = parseInt(localStorage.getItem('saprec5_ts') || '0');
+    // Usa Firebase se non c'è dato locale O se Firebase ha timestamp
+    if (!localTs || Object.keys(S.mapping).length === 0) {
+      S = { ...BLANK, ...remote };
+      try { localStorage.setItem(SK, JSON.stringify(S)); } catch {}
+      renderAll();
+      showFbBanner();
+    }
+    _fbSetStatus('sync');
+  } catch(e) { _fbSetStatus('err'); }
+}
+window.addEventListener('fb-ready', _fbInit);
+// Se Firebase non si carica entro 5s, rimani offline
+setTimeout(() => { if (!window._fbReady) _fbSetStatus('offline'); }, 5000);
+['coa','civile','corporate','mapping','bilanci','notes','recon'].forEach(k=>{ if(!S[k]) S[k]=BLANK[k]; });
+
+// Debounce Firebase save (max 1 write ogni 2s)
+let _fbSaveTimer = null;
+function save() {
+  try { localStorage.setItem(SK, JSON.stringify(S)); localStorage.setItem('saprec5_ts', Date.now()); } catch {}
+  _fbSetStatus('saving');
+  clearTimeout(_fbSaveTimer);
+  _fbSaveTimer = setTimeout(() => {
+    if (window._fbSave) window._fbSave(S);
+  }, 2000);
+}
+
+// Aggiorna stato da remoto (altro dispositivo)
+function _fbMergeRemote(remote) {
+  S = { ...BLANK, ...remote };
+  try { localStorage.setItem(SK, JSON.stringify(S)); } catch {}
+  renderAll();
+  showFbBanner();
+}
+
+// Indicatore stato sync nella navbar
+function _fbSetStatus(status) {
+  const el = document.getElementById('fb-status');
+  if (!el) return;
+  const cfg = {
+    saving:  { icon:'⏳', color:'#f59e0b', title:'Salvataggio in corso...' },
+    sync:    { icon:'☁️', color:'#22c55e', title:'Sincronizzato con Firebase' },
+    synced:  { icon:'🔄', color:'#3b82f6', title:'Aggiornato da altro dispositivo' },
+    err:     { icon:'⚠️', color:'#ef4444', title:'Errore sincronizzazione' },
+    offline: { icon:'📴', color:'#94a3b8', title:'Modalità offline (localStorage)' },
+  };
+  const c = cfg[status] || cfg.offline;
+  el.textContent = c.icon;
+  el.title = c.title;
+  el.style.color = c.color;
+}
+
+function showFbBanner() {
+  let b = document.getElementById('fb-banner');
+  if (b) return;
+  b = document.createElement('div');
+  b.id = 'fb-banner';
+  b.style.cssText = 'position:fixed;top:12px;left:50%;transform:translateX(-50%);background:#1e40af;color:#fff;padding:8px 18px;border-radius:20px;font-size:12px;font-weight:600;z-index:9999;box-shadow:0 4px 12px rgba(0,0,0,.2)';
+  b.textContent = '🔄 Dati aggiornati da un altro dispositivo';
+  document.body.appendChild(b);
+  setTimeout(() => b.remove(), 4000);
+}
+function set(fn) { S={...S,...(typeof fn==='function'?fn(S):fn)}; save(); }
+
+// ══════════════════════════════════════════════════════════
+// HELPERS
+// ══════════════════════════════════════════════════════════
+const N  = v => typeof v==='number'&&!isNaN(v)?v:0;
+function _fmtAbs(n){const [i,d]=Math.abs(n).toFixed(2).split(".");return i.replace(/\B(?=(\d{3})+(?!\d))/g,".")+","+d;}
+const fmt = v => { const n=N(v); return n<0?'('+_fmtAbs(n)+')':_fmtAbs(n); };
+const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+const cn  = v => v<0?'neg':'pos';
+
+function kids(struct, pid) {
+  return struct.filter(n=>n.parentId===pid);
+}
+function descendants(struct, pid) {
+  const ch = kids(struct,pid).map(n=>n.id);
+  return [...ch,...ch.flatMap(id=>descendants(struct,id))];
+}
+function depth(struct, id, d=0) {
+  const n=struct.find(x=>x.id===id);
+  return (!n||!n.parentId)?d:depth(struct,n.parentId,d+1);
+}
+
+// Risolve un codice nodo del mapping nella struttura.
+// Supporta: match esatto, o prefisso numerico ("1602" → "1602 - Denaro e valori in cassa")
+function resolveNode(struct, code) {
+  if (!code) return null;
+  if (struct.find(n=>n.id===code)) return code;
+  const found = struct.find(n=>n.id.startsWith(code+' -')||n.id.startsWith(code+' '));
+  return found ? found.id : null;
+}
+
+// Saldo di un conto in un bilancio (YTD=fin, PTD=fin-ini)
+// Anno fiscale 01/04/Y-31/03/Y+1. PTD = delta vs mese precedente.
+function periodYM(p){ return String(p||'').slice(0,7); }
+function fiscalYearStart(period) {
+  const s=String(period||'').slice(0,7).split('-');
+  const y=parseInt(s[0]||0), m=parseInt(s[1]||0);
+  return (m>=4?y:y-1)+'-04';
+}
+function prevBilancio(bil) {
+  const sorted=[...S.bilanci].sort((a,b)=>a.period.localeCompare(b.period));
+  const idx=sorted.findIndex(b=>b.period===bil.period);
+  return idx>0?sorted[idx-1]:null;
+}
+function getBalanceYTD(bil,accountId){
+  const r=bil.rows.find(x=>x.id===accountId); return r?N(r.fin):0;
+}
+function getBalance(bil, accountId, mode) {
+  if(mode==='ytd') return getBalanceYTD(bil,accountId);
+  const prev=prevBilancio(bil);
+  if(prev) return getBalanceYTD(bil,accountId)-getBalanceYTD(prev,accountId);
+  const r=bil.rows.find(x=>x.id===accountId);
+  return r?N(r.fin)-N(r.ini):0;
+}
+
+// Totale di un nodo (inclusi discendenti) in un bilancio
+// Valuta formula esplicita di un nodo (es: "A + B - C" o "A / B")
+// Supporta: +, -, / tra ID nodo. Prefisso "=" ignorato.
+function evalFormula(formula, struct, mapping, mapKey, bil, mode) {
+  const expr = formula.replace(/^=\s*/, '').trim();
+  // Gestione divisione (percentuale): "A / B"
+  if (expr.includes('/') && !expr.includes('+') && !expr.includes('-')) {
+    const parts = expr.split('/').map(s=>s.trim());
+    if (parts.length === 2) {
+      const a = nodeTotal(struct, mapping, mapKey, bil, parts[0], mode);
+      const b = nodeTotal(struct, mapping, mapKey, bil, parts[1], mode);
+      return b !== 0 ? a / b : 0;
+    }
+  }
+  // Tokenizza: split su + e - mantenendo il segno
+  let result = 0;
+  const tokens = expr.split(/(?=[+\-])/).map(s=>s.trim()).filter(Boolean);
+  for (const tok of tokens) {
+    const sign = tok.startsWith('-') ? -1 : 1;
+    const id   = tok.replace(/^[+\-]\s*/, '').trim();
+    if (!id) continue;
+    result += sign * nodeTotal(struct, mapping, mapKey, bil, id, mode);
+  }
+  return result;
+}
+
+function nodeTotal(struct, mapping, mapKey, bil, nodeId, mode) {
+  // Se il nodo ha una formula esplicita, usala (evita doppi conteggi)
+  const nodeDef = struct.find(n=>n.id===nodeId);
+  if (nodeDef?.formula) return evalFormula(nodeDef.formula, struct, mapping, mapKey, bil, mode);
+  // mapKey: 'civ' o 'corp' — internamente usa civD/civC o corpD/corpC in base al segno del saldo
+  const scope = new Set([nodeId,...descendants(struct,nodeId)]);
+  const kD = mapKey==='civ'?'civD':'corpD';
+  const kC = mapKey==='civ'?'civC':'corpC';
+  return S.coa.reduce((sum,a)=>{
+    const bal = getBalance(bil, a.id, mode);
+    const rawTarget = bal>=0 ? (mapping[a.id]?.[kD]||mapping[a.id]?.[kC]) : (mapping[a.id]?.[kC]||mapping[a.id]?.[kD]);
+    const target = resolveNode(struct, rawTarget);
+    if (!target||!scope.has(target)) return sum;
+    return sum + bal;
+  }, 0);
+}
+
+// ══════════════════════════════════════════════════════════
+// SAP BALANCE PARSER
+// ══════════════════════════════════════════════════════════
+function parseSAP(rows) {
+  // Legge metadati: società, data inizio (B21=idx20), data fine (B23=idx22)
+  const meta = {};
+  for (let i=0;i<Math.min(rows.length,30);i++) {
+    const k = String(rows[i]?.[0]||'').trim();
+    const v = String(rows[i]?.[1]||'').trim();
+    if (k==='Società') meta.company = v;
+    if (k==='Data di reg. dal') meta.dateFrom = v;
+    if (k==='Data di reg. al')  meta.dateTo   = v;
+  }
+  // Converti data GG.MM.AAAA → AAAA-MM-GG
+  function cvDate(s) {
+    const m = String(s||'').match(/(\d{1,2})\.(\d{2})\.(\d{4})/);
+    return m ? `${m[3]}-${m[2]}-${m[1].padStart(2,'0')}` : s;
+  }
+  meta.dateFrom = cvDate(meta.dateFrom);
+  meta.dateTo   = cvDate(meta.dateTo);
+  meta.period   = meta.dateTo || 'Sconosciuto';
+
+  // Parser numerico robusto: gestisce formato italiano (1.388,03), anglosassone (1388.03)
+  // e stringhe con segno negativo o parentesi tipo (1.388,03)
+  function parseItNum(v) {
+    if (typeof v === 'number') return isNaN(v) ? 0 : v;
+    let s = String(v || '').trim();
+    if (!s) return 0;
+    // Parentesi = negativo: (1.388,03) → -1388.03
+    const neg = s.startsWith('(') && s.endsWith(')');
+    s = s.replace(/[()]/g, '').trim();
+    // Rimuovi spazi interni e simboli valuta
+    s = s.replace(/\s/g, '').replace(/[€$£]/g, '');
+    // Determina formato: se c'è virgola E punto, il più a destra è il decimale
+    const hasDot   = s.includes('.');
+    const hasComma = s.includes(',');
+    if (hasDot && hasComma) {
+      // es. 1.388,03 → punto=migliaia, virgola=decimale
+      if (s.lastIndexOf('.') < s.lastIndexOf(',')) {
+        s = s.replace(/\./g, '').replace(',', '.');
+      } else {
+        // es. 1,388.03 → virgola=migliaia, punto=decimale
+        s = s.replace(/,/g, '');
+      }
+    } else if (hasComma) {
+      // Solo virgola: può essere decimale (1388,03) o migliaia (1,388)
+      const parts = s.split(',');
+      if (parts.length === 2 && parts[1].length <= 2) {
+        s = parts[0] + '.' + parts[1]; // decimale
+      } else {
+        s = s.replace(/,/g, ''); // migliaia
+      }
+    }
+    // A questo punto solo cifre e punto decimale
+    const n = parseFloat(s) || 0;
+    return neg ? -n : n;
+  }
+
+  // Trova header "Conto Co.Ge."
+  const hdrIdx = rows.findIndex(r=>r?.some(c=>String(c||'').includes('Conto Co.Ge.')));
+  if (hdrIdx < 0) return null;
+
+  // Colonne: A=codice, B=descr, C=saldo iniziale, D=saldo finale
+  const data = [];
+  for (let i=hdrIdx+1;i<rows.length;i++) {
+    const r = rows[i]; if(!r||!r[0]) continue;
+    const id = String(r[0]).trim();
+    if (!id || id==='Somma totale') continue;
+    const ini = typeof r[2]==='number' ? r[2] : parseItNum(r[2]);
+    const fin = typeof r[3]==='number' ? r[3] : parseItNum(r[3]);
+    data.push({id, name: String(r[1]||'').trim(), ini, fin});
+  }
+  return data.length ? { ...meta, rows: data } : null;
+}
+
+// ══════════════════════════════════════════════════════════
+// MAPPING PARSERS
+// ══════════════════════════════════════════════════════════
+// Importa mapping da CSV export dell'app (formato: ID;Nome;CivDare;CivAvere;CorpDare;CorpAvere)
+// oppure da Excel (foglio mapping con civile)
+function parseMappingCSV(rows) {
+  const h = rows[0].map(c=>String(c||'').toLowerCase().trim());
+  const iID  = h.findIndex(c=>c.includes('id')||c.includes('codice')); 
+  const iNM  = 1; // nome sempre in col 1
+  // Nuovo formato (6 col): Civ Dare, Civ Avere, Corp Dare, Corp Avere
+  const iCivD  = h.findIndex(c=>c.includes('civ')&&c.includes('dare'));
+  const iCivC  = h.findIndex(c=>c.includes('civ')&&c.includes('avere'));
+  const iCorpD = h.findIndex(c=>c.includes('corp')&&c.includes('dare'));
+  const iCorpC = h.findIndex(c=>c.includes('corp')&&c.includes('avere'));
+  // Vecchio formato (4 col): Civile, Corporate — mappa su Dare e Avere uguali
+  const iCiv   = iCivD<0 ? h.findIndex(c=>c.includes('civ')||c.includes('locale')) : -1;
+  const iCorp  = iCorpD<0 ? h.findIndex(c=>c.includes('corp')) : -1;
+  const mapping={}, coa=[];
+  const seen=new Set();
+  for (let i=1;i<rows.length;i++) {
+    const r=rows[i]; if(!r||!r[0]) continue;
+    const id=String(r[iID>=0?iID:0]).trim();
+    const name=String(r[iNM]||'').trim();
+    if (!id) continue;
+    if (!seen.has(id)) { coa.push({id,name}); seen.add(id); }
+    if (iCivD>=0) {
+      // Nuovo formato
+      mapping[id] = {
+        civD:  String(r[iCivD]||'').trim(),
+        civC:  String(r[iCivC>=0?iCivC:iCivD]||'').trim(),
+        corpD: String(r[iCorpD>=0?iCorpD:4]||'').trim(),
+        corpC: String(r[iCorpC>=0?iCorpC:(iCorpD>=0?iCorpD+1:5)]||'').trim(),
+      };
+    } else {
+      // Vecchio formato: civ/corp → entrambi Dare e Avere uguali
+      const c=String(r[iCiv>=0?iCiv:2]||'').trim();
+      const p=String(r[iCorp>=0?iCorp:3]||'').trim();
+      mapping[id] = { civD:c, civC:c, corpD:p, corpC:p };
+    }
+  }
+  return {mapping, coa};
+}
+
+// Importa struttura + mapping da Excel (foglio "mapping con civile")
+// Colonne: A=codice, B=descr, C=en, D=Sezione, E=Gruppo, F=Nodo
+function parseMappingExcel(rows) {
+  const first = rows[0]?.[0];
+  const start = (typeof first==='string'&&isNaN(Number(first)))?1:0;
+  const sez=new Map(), grp=new Map(), nod=new Map();
+  const mapping={}, coa=[];
+  const seen=new Set();
+  for (let i=start;i<rows.length;i++) {
+    const r=rows[i]; if(!r||r[0]==null||r[0]==='') continue;
+    const id=String(r[0]).trim();
+    const name=String(r[1]||'').trim();
+    const s=r[3]!=null?String(r[3]).trim():null;
+    const g=r[4]!=null?String(r[4]).trim():null;
+    const n=r[5]!=null?String(r[5]).trim():null;
+    if (!seen.has(id)) { coa.push({id,name}); seen.add(id); }
+    if (!s) continue;
+    if (!sez.has(s)) sez.set(s,{id:s,name:s,parentId:null});
+    let gId=null;
+    if (g) { gId=g; if(!grp.has(g)) grp.set(g,{id:g,name:g,parentId:s}); }
+    let nId=null;
+    if (n&&n!=='-') { nId=n; if(!nod.has(n)) nod.set(n,{id:n,name:n,parentId:gId||s}); }
+    const target = nId||gId||s;
+    mapping[id] = { civD: target, civC: target, corpD: '', corpC: '' };
+  }
+  const struct = [...sez.values(),...grp.values(),...nod.values()];
+  return {mapping, coa, struct};
+}
+
+// ══════════════════════════════════════════════════════════
+// NAVIGATION
+// ══════════════════════════════════════════════════════════
+const PAGES = [
+  {id:'dash',   label:'Dashboard',      ic:'📊'},
+  {id:'import', label:'Importa dati',   ic:'📁'},
+  {id:'struct', label:'Strutture',      ic:'🌿'},
+  {id:'map',    label:'Mapping conti',  ic:'🔗'},
+  {id:'report', label:'Report',         ic:'📋'},
+  {id:'recon',  label:'Riconciliazione',ic:'⚖️'},
+];
+let page = 'dash';
+function goTo(id) { page=id; renderAll(); }
+
+let sbCollapsed=false;
+function toggleSB(){
+  sbCollapsed=!sbCollapsed;
+  document.getElementById('sb').classList.toggle('col',sbCollapsed);
+  document.getElementById('sb-tog').textContent=sbCollapsed?'▶':'◀';
+}
+function buildNav() {
+  document.getElementById('sb-nav').innerHTML = PAGES.map(p=>`
+    <button class="nav-btn${p.id===page?' on':''}" onclick="goTo('${p.id}')" title="${p.label}">
+      <span class="nav-ic">${p.ic}</span><span class="nav-lbl">${p.label}</span>
+    </button>`).join('');
+  const co = S.bilanci[0]?.company||'';
+  document.getElementById('sb-co').textContent = co || '—';
+}
+
+function renderAll() {
+  buildNav();
+  document.querySelectorAll('.pg').forEach(p=>p.classList.remove('on'));
+  document.getElementById('pg-'+page)?.classList.add('on');
+  ({dash:rDash, import:rImport, struct:rStruct, map:rMap, report:rReport, recon:rRecon})[page]?.();
+}
+
+// ══════════════════════════════════════════════════════════
+// DASHBOARD
+// ══════════════════════════════════════════════════════════
+function dashKPI() {
+  if (!S.bilanci.length) return '';
+  const struct = S.civile.length ? S.civile : S.corporate;
+  const mapKey = S.civile.length ? 'civ' : 'corp';
+  // Filtra e ordina i periodi selezionati
+  const selP = dashPeriods.length ? dashPeriods : S.bilanci.map(b=>b.period);
+  const bils = [...S.bilanci]
+    .filter(b=>selP.includes(b.period))
+    .sort((a,b)=>a.period.localeCompare(b.period));
+  if (!bils.length) return '<p style="color:#a8a29e;font-size:12px">Nessun periodo selezionato.</p>';
+
+  function fn(...hints) {
+    for (const h2 of hints) {
+      const lo = h2.toLowerCase();
+      let n = struct.find(n=>n.id.toLowerCase()===lo||n.id.toLowerCase().startsWith(lo+' -')||n.id.toLowerCase().startsWith(lo+' '));
+      if (n) return n;
+      n = struct.find(n=>n.id.toLowerCase().includes(lo)||n.name.toLowerCase().includes(lo));
+      if (n) return n;
+    }
+    return null;
+  }
+
+  function cassaTot(b) {
+    const nd=fn('16 - disponibilit','disponibilit'); if(!nd) return null;
+    const ex=fn('1603'); const exIds=ex?new Set([ex.id,...descendants(struct,ex.id)]):new Set();
+    const scope=new Set([nd.id,...descendants(struct,nd.id)].filter(x=>!exIds.has(x)));
+    const kD3=mapKey==='civ'?'civD':'corpD', kC3=mapKey==='civ'?'civC':'corpC';
+    return S.coa.reduce((s,a)=>{
+      const ytd=getBalanceYTD(b,a.id);
+      const raw=ytd>=0?(S.mapping[a.id]?.[kD3]||S.mapping[a.id]?.[kC3]):(S.mapping[a.id]?.[kC3]||S.mapping[a.id]?.[kD3]);
+      const t=resolveNode(struct,raw);
+      return (t&&scope.has(t))?s+getBalance(b,a.id,dashMode):s;
+    },0);
+  }
+
+  function calcUtileKPI(b, excludeTax) {
+    // Struttura Civile: (D + E) - nodo 9 Gestionale
+    const civStruct = S.civile;
+    const civKey = 'civ';
+    const nD = civStruct.find(n=>n.id==='D'||n.id.startsWith('D ')||n.id.startsWith('D-')||n.name.toLowerCase().startsWith('costi'));
+    const nE = civStruct.find(n=>n.id==='E'||n.id.startsWith('E ')||n.id.startsWith('E-')||n.name.toLowerCase().startsWith('ricavi'));
+    if (!nD && !nE) return null;
+    const totD = nD ? nodeTotal(civStruct,S.mapping,civKey,b,nD.id,dashMode) : 0;
+    const totE = nE ? nodeTotal(civStruct,S.mapping,civKey,b,nE.id,dashMode) : 0;
+    // Sottrai nodo 9 Gestionale da entrambi
+    const n9 = civStruct.find(n=>n.id==='9 Gestionale'||n.id==='9'||n.id.startsWith('9 ')||n.name.toLowerCase().includes('gestionale'));
+    const tot9 = n9 ? nodeTotal(civStruct,S.mapping,civKey,b,n9.id,dashMode) : 0;
+    const utileNetto = totD + totE - tot9;
+    if (!excludeTax) return utileNetto;
+    // Utile ante imposte = utile netto - nodo 63
+    const n63 = civStruct.find(n=>n.id==='63'||n.id.startsWith('63 ')||n.id.startsWith('63-'));
+    const tot63 = n63 ? nodeTotal(civStruct,S.mapping,civKey,b,n63.id,dashMode) : 0;
+    return utileNetto - tot63;
+  }
+
+  const kpiDefs = [
+    {ic:'\u{1f4c8}', label:'Fatturato',         note:'nodo 4001',    color:'#15803d', border:'#bbf7d0', bg:'#f0fdf4',
+     f:(b)=>{ const n=fn('4001'); return n?nodeTotal(struct,S.mapping,mapKey,b,n.id,dashMode):null; }},
+    {ic:'\u{1f4e3}', label:'Marketing',          note:'nodo 5202',    color:'#7e22ce', border:'#e9d5ff', bg:'#faf5ff',
+     f:(b)=>{ const n=fn('5202'); return n?nodeTotal(struct,S.mapping,mapKey,b,n.id,dashMode):null; }},
+    {ic:'\u{1f3ed}', label:'Magazzino',          note:'',             color:'#0891b2', border:'#bae6fd', bg:'#f0f9ff',
+     f:(b)=>{ const n=fn('1201','magazzino'); return n?nodeTotal(struct,S.mapping,mapKey,b,n.id,dashMode):null; }},
+    {ic:'\u{1f4b5}', label:'Cassa netta',        note:'escluso 1603', color:'#0369a1', border:'#bfdbfe', bg:'#eff6ff',
+     f:(b)=>cassaTot(b)},
+    {ic:'\u{1f4ca}', label:'Utile ante imposte', note:'',             color:'#0369a1', border:'#bae6fd', bg:'#f0f9ff',
+     f:(b)=>calcUtileKPI(b,true)},
+    {ic:'\u{1f4b0}', label:'Utile netto',        note:'',             color:'#0c4a6e', border:'#7dd3fc', bg:'#e0f2fe',
+     f:(b)=>calcUtileKPI(b,false)},
+  ];
+
+  const cards = kpiDefs.map(d=>{
+    const vals = bils.map(b=>d.f(b));
+    if (vals.every(v=>v===null)) return '';
+
+    // Ultima riga in grande, le precedenti più piccole
+    const rows = bils.map((b,i)=>{
+      const v = vals[i];
+      const numColor = v===null?'#d1d5db':v<0?'#dc2626':d.color;
+      const numStr = v===null ? '—' : fmt(v);
+      return '<div style="display:flex;justify-content:space-between;align-items:baseline;'
+        + (i>0?'border-top:1px solid '+d.border+';':'')
+        + 'padding:5px 0">'
+        + '<span style="font-size:12px;color:#64748b;font-weight:400">'+esc(periodYM(b.period))+'</span>'
+        + '<span style="font-family:monospace;font-size:13px;font-weight:600;color:'+numColor+'">'+numStr+'</span>'
+        + '</div>';
+    }).join('');
+
+    return '<div style="background:'+d.bg+';border:1px solid '+d.border+';border-radius:12px;padding:12px 14px;min-width:160px;flex:1">'
+      + '<p style="font-size:13px;font-weight:700;color:#334155;margin-bottom:10px">'
+      + d.ic+' '+d.label
+      + (d.note?'<span style="font-size:9px;color:#a8a29e;margin-left:5px">'+d.note+'</span>':'')
+      + '</p>'
+      + rows
+      + '</div>';
+  }).filter(Boolean).join('');
+
+  return '<div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:16px">'+cards+'</div>';
+}
+
+function dashToolbar() {
+  const allP = S.bilanci.map(b=>b.period).sort();
+  // Inizializza selezione con tutti i periodi se vuota
+  if (!dashPeriods.length) dashPeriods = [...allP];
+  const hasH = _fileHandles.size > 0;
+
+  const periodBtns = allP.map(p => {
+    const sel = dashPeriods.includes(p);
+    return '<button class="btn btn-sm" style="'
+      + (sel ? 'background:#1d4ed8;color:#fff;border:1px solid #1d4ed8;'
+              : 'background:#fff;color:#64748b;border:1px solid #d6d3d1;')
+      + 'font-family:monospace;font-size:11px" '
+      + 'onclick="dashTogglePeriod(\''+esc(p)+'\')">'
+      + esc(periodYM(p)) + '</button>';
+  }).join('');
+
+  const modeBtn = (mode, label) =>
+    '<button class="btn btn-sm" style="'
+    + (dashMode===mode ? 'background:#0369a1;color:#fff;border:1px solid #0369a1;'
+                       : 'background:#fff;color:#64748b;border:1px solid #d6d3d1;')
+    + '" onclick="dashSetMode(\''+mode+'\')">' + label + '</button>';
+
+  const reloadBtn = hasH
+    ? '<button class="btn btn-sm" style="background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;font-weight:600" onclick="reloadAll()" title="Ricarica tutti i file">\uD83D\uDD04 Ricarica</button>'
+    : '';
+  const reloadBtnFolder = _folderHandle
+    ? '<button class="btn btn-sm" style="background:#dcfce7;color:#166534;border:1px solid #86efac;font-weight:600" onclick="loadFromFolder(false)" title="Ricarica da cartella">🔄 Ricarica</button>'
+    : reloadBtn;
+
+  return '<div style="display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:12px;padding:8px 12px;background:#f8faff;border:1px solid #e0eaff;border-radius:10px">'
+    + '<span style="font-size:11px;font-weight:600;color:#64748b;margin-right:2px">Periodi:</span>'
+    + periodBtns
+    + '<span style="width:1px;height:20px;background:#e2e8f0;margin:0 4px"></span>'
+    + modeBtn('ytd','YTD')
+    + modeBtn('ptd','PTD')
+    + '<span style="width:1px;height:20px;background:#e2e8f0;margin:0 4px"></span>'
+    + reloadBtn
+    + '</div>';
+}
+
+function dashTogglePeriod(p) {
+  if (dashPeriods.includes(p)) {
+    if (dashPeriods.length === 1) return; // almeno 1 sempre attivo
+    dashPeriods = dashPeriods.filter(x=>x!==p);
+  } else {
+    dashPeriods = [...dashPeriods, p].sort();
+  }
+  rDash();
+}
+
+function dashSetMode(m) {
+  dashMode = m;
+  rDash();
+}
+
+function rDash() {
+  const nCoa=S.coa.length;
+  const nBil=S.bilanci.length;
+  const nMapCiv=S.coa.filter(a=>S.mapping[a.id]?.civD).length;
+  const nMapCorp=S.coa.filter(a=>S.mapping[a.id]?.corpD).length;
+  const pCiv=nCoa?Math.round(nMapCiv/nCoa*100):0;
+  const pCorp=nCoa?Math.round(nMapCorp/nCoa*100):0;
+
+  document.getElementById('pg-dash').innerHTML=`
+    <div class="row">
+      <div><p class="h1">Dashboard</p><p class="sub">Stato del progetto di riclassificazione.</p></div>
+      ${nCoa?`<button class="btn btn-del btn-sm" onclick="if(confirm('Eliminare tutti i dati?'))set(()=>({...${JSON.stringify(BLANK)}}))">🗑 Reset</button>`:''}
+    </div>
+    <div class="stats">
+      <div class="stat"><div class="stat-l">Conti piano</div><div class="stat-v" style="color:#2563eb">${nCoa}</div></div>
+      <div class="stat"><div class="stat-l">Bilanci caricati</div><div class="stat-v" style="color:#0891b2">${nBil}</div></div>
+      <div class="stat"><div class="stat-l">Mapp. Civile</div><div class="stat-v" style="color:#15803d">${pCiv}%</div></div>
+      <div class="stat"><div class="stat-l">Mapp. Corporate</div><div class="stat-v" style="color:#7e22ce">${pCorp}%</div></div>
+    </div>
+    ${S.bilanci.length&&S.coa.length ? dashToolbar()+dashKPI() : '<p style="color:#a8a29e;font-size:13px;margin-top:20px">Carica bilanci e mapping per vedere i KPI.</p>'}
+  `;
+}
+function delBil(period) {
+  if(!confirm('Eliminare periodo '+period+'?')) return;
+  _fileHandles.delete(period);
+  set(s=>({bilanci:s.bilanci.filter(b=>b.period!==period)}));
+  rImpTab();
+}
+
+// ══════════════════════════════════════════════════════════
+// IMPORT
+// ══════════════════════════════════════════════════════════
+let impTab='bil';
+// Dashboard state
+let dashMode='ytd';           // 'ytd' | 'ptd'
+let dashPeriods=[];           // [] = tutti
+
+function rImport() {
+  const pg=document.getElementById('pg-import');
+  pg.innerHTML=`
+    <div class="row"><div><p class="h1">Importa Dati</p><p class="sub">Carica bilanci SAP, piano dei conti e mapping.</p></div></div>
+    <div class="tabs">
+      <button class="tab${impTab==='bil'?' on':''}" onclick="impTab='bil';rImport()">💰 Bilancio SAP</button>
+    </div>
+    <div id="imp-body"></div>`;
+  rImpTab();
+}
+function rBilUI() {
+  const hasFolder  = !!_folderHandle;
+  const hasHandles = _fileHandles.size > 0;
+
+  const folderBar = hasFolder
+    ? '<div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:9px;margin-bottom:10px">'
+      + '<span style="font-size:18px">\uD83D\uDCC1</span>'
+      + '<span style="font-size:12px;font-weight:600;color:#166534;flex:1">' + esc(_folderName||'') + '</span>'
+      + '<button class="btn btn-sm" style="background:#dcfce7;color:#166534;border:1px solid #86efac;font-weight:700" onclick="loadFromFolder(false)">\uD83D\uDD04 Ricarica</button>'
+      + '<button class="btn btn-sm" style="background:#fff;color:#64748b;border:1px solid #d6d3d1" onclick="pickFolder()">Cambia</button>'
+      + '</div>'
+    : '';
+
+  const reloadBtn = (hasHandles && !hasFolder)
+    ? '<button class="btn btn-sm" style="background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;font-weight:600" onclick="reloadAll()">\uD83D\uDD04 Ricarica tutto (' + _fileHandles.size + ')</button>'
+    : '';
+
+  const periodi = S.bilanci.map(function(b) {
+    const hasH = _fileHandles.has(b.period);
+    const reloadOne = hasH
+      ? '<button class="btn btn-sm" style="background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe" title="Ricarica dal file" onclick="reloadBil(\'' + esc(b.period) + '\')">\uD83D\uDD04</button>'
+      : '<span style="color:#d1d5db;font-size:11px;padding:4px 6px" title="Ricarica manualmente">\u26a0</span>';
+    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:#fafaf9;border:1px solid #e7e5e4;border-radius:9px;margin-bottom:6px;font-size:12px">'
+      + '<span><b style="font-family:monospace;color:#1e40af">' + esc(b.period) + '</b> \u2014 ' + esc(b.dateFrom) + ' \u2192 ' + esc(b.dateTo) + ' \u2014 <span style="color:#78716c">' + b.rows.length + ' conti</span></span>'
+      + '<span style="display:flex;gap:5px">' + reloadOne
+      + '<button class="btn btn-del btn-sm" onclick="delBil(\'' + esc(b.period) + '\')">\uD83D\uDDD1</button>'
+      + '</span></div>';
+  }).join('');
+
+  const periodiHtml = S.bilanci.length
+    ? '<div style="margin-top:14px">' + periodi + '</div>'
+    : '<p style="font-size:12px;color:#a8a29e;margin-top:10px">Nessun periodo caricato.</p>';
+
+  const upzText = hasFolder
+    ? '<p style="font-weight:600;font-size:13px;margin-bottom:3px">Clicca per ricaricare dalla cartella</p>'
+      + '<p style="font-size:11px;color:#a8a29e">\uD83D\uDCC1 ' + esc(_folderName||'') + '</p>'
+    : '<p style="font-weight:600;font-size:13px;margin-bottom:3px">Clicca per selezionare un file</p>'
+      + '<p style="font-size:11px;color:#a8a29e">Formato .xlsx SAP \u2014 puoi selezionare pi\u00f9 file</p>';
+
+  return '<div class="card">'
+    + '<div class="card-hd" style="display:flex;justify-content:space-between;align-items:center">'
+    + '<span>\uD83D\uDCB0 Carica Bilancio SAP (.xlsx)</span>' + reloadBtn
+    + '</div>'
+    + '<div class="card-bd">'
+    + folderBar
+    + '<p style="font-size:12px;color:#78716c;margin-bottom:12px;line-height:1.6">Estrai il bilancio di verifica da SAP (query <b>2CCFITRIALBALQ0001</b>).<br>Il periodo viene letto automaticamente dall\'intestazione. Puoi caricare pi\u00f9 periodi.</p>'
+    + '<div class="upz" onclick="hasFolder?loadFromFolder(false):pickBilFile()">'
+    + '<div style="font-size:28px;margin-bottom:8px">\uD83D\uDCC2</div>'
+    + upzText
+    + '</div>'
+    + '<div style="text-align:center;margin-top:10px">'
+    + '<button class="btn btn-sm" style="background:#f0fdf4;color:#166534;border:1px solid #bbf7d0;font-weight:600" onclick="pickFolder()">\uD83D\uDCC1 Scegli cartella SAP</button>'
+    + '<span style="font-size:11px;color:#a8a29e;display:block;margin-top:4px">Seleziona la cartella una volta \u2014 poi usa Ricarica</span>'
+    + '</div>'
+    + '<input type="file" id="fi-bil" accept=".xlsx" multiple class="hidden" onchange="impBil(this)">'
+    + '<div id="msg-bil"></div>'
+    + periodiHtml
+    + '</div></div>';
+}
+
+function rImpTab() {
+  const el=document.getElementById('imp-body'); if(!el) return;
+  if (impTab==='bil') {
+    el.innerHTML = rBilUI();
+  } else {
+    el.innerHTML=`<div class="card"><div class="card-hd">🔗 Carica Mapping / Piano dei Conti</div><div class="card-bd">
+      <p style="font-size:12px;color:#78716c;margin-bottom:12px;line-height:1.6">
+        Puoi caricare:<br>
+        • <b>Excel con foglio "mapping con civile"</b> (formato SAP — importa piano + struttura civile + mapping)<br>
+        • <b>CSV esportato dall'app</b> (colonne: ID Conto; Nome; Civ; Corp — separatore <b>;</b>)
+      </p>
+      <div class="upz" onclick="document.getElementById('fi-map').click()">
+        <div style="font-size:28px;margin-bottom:8px">🗂</div>
+        <p style="font-weight:600;font-size:13px;margin-bottom:3px">Clicca per selezionare il file</p>
+        <p style="font-size:11px;color:#a8a29e">.xlsx o .csv</p>
+      </div>
+      <input type="file" id="fi-map" accept=".xlsx,.csv" class="hidden" onchange="impMap(this)">
+      <div id="msg-map"></div>
+      ${S.coa.length?`<div class="alert ok" style="margin-top:10px">✓ Piano dei conti: ${S.coa.length} conti caricati</div>`:''}
+      ${Object.keys(S.mapping).length?`<div class="alert ok">✓ Mapping: ${Object.keys(S.mapping).length} conti mappati</div>`:''}
+    </div></div>`;
+  }
+}
+
+function showMsg(id,type,html) {
+  const el=document.getElementById(id); if(el) el.innerHTML=`<div class="alert ${type}" style="margin-top:10px">${html}</div>`;
+}
+
+async function impBil(inp) {
+  const files=[...inp.files].filter(f=>!f.name.startsWith('~$'));
+  if(!files.length) return;
+  showMsg('msg-bil','info','Lettura file...');
+  let ok=0, err=[];
+  for (const f of files) {
+    try {
+      const wb = await XLSX.read(await f.arrayBuffer());
+      const rows = wb.Sheets[wb.SheetNames[0]];
+      const bil = parseSAP(rows);
+      if (!bil) { err.push(f.name+': formato non riconosciuto'); continue; }
+      set(s=>{
+        const others = s.bilanci.filter(b=>b.period!==bil.period);
+        return { bilanci: [...others, bil].sort((a,b)=>a.period.localeCompare(b.period)) };
+      });
+      // Salva handle per auto-reload (File System Access API)
+      if (f.handle) _fileHandles.set(bil.period, { handle: f.handle, period: bil.period });
+      ok++;
+    } catch(e) { err.push(f.name+': '+e.message); }
+  }
+  const msg = ok ? `✓ ${ok} bilancio/i importato/i.` : '';
+  const errMsg = err.length ? '<br>⚠ '+err.join('<br>') : '';
+  showMsg('msg-bil', ok?'ok':'err', msg+errMsg);
+  inp.value='';
+  rImpTab();
+}
+
+// Ricarica un singolo bilancio dal suo file handle
+async function reloadBil(period) {
+  const entry = _fileHandles.get(period);
+  if (!entry) { alert('Handle non disponibile — ricarica il file manualmente.'); return; }
+  try {
+    // Verifica permesso lettura
+    const perm = await entry.handle.queryPermission({ mode: 'read' });
+    if (perm !== 'granted') {
+      const req = await entry.handle.requestPermission({ mode: 'read' });
+      if (req !== 'granted') { alert('Permesso negato.'); return; }
+    }
+    const file = await entry.handle.getFile();
+    const wb = await XLSX.read(await file.arrayBuffer());
+    const bil = parseSAP(wb.Sheets[wb.SheetNames[0]]);
+    if (!bil) { alert(entry.handle.name + ': formato non riconosciuto'); return; }
+    set(s=>({ bilanci: [...s.bilanci.filter(b=>b.period!==bil.period), bil].sort((a,b)=>a.period.localeCompare(b.period)) }));
+    _fileHandles.set(bil.period, { handle: entry.handle, period: bil.period });
+    rImpTab();
+    showMsg('msg-bil','ok','✓ Periodo '+period+' ricaricato.');
+  } catch(e) { alert('Errore: '+e.message); }
+}
+
+// Ricarica tutti i bilanci con handle disponibile
+async function reloadAll() {
+  if (!_fileHandles.size) { alert('Nessun file handle disponibile. Carica i file almeno una volta in questa sessione.'); return; }
+  showMsg('msg-bil','info','🔄 Ricarico tutti i file...');
+  let ok=0, err=[];
+  for (const [period, entry] of _fileHandles) {
+    try {
+      const perm = await entry.handle.queryPermission({ mode: 'read' });
+      if (perm !== 'granted') await entry.handle.requestPermission({ mode: 'read' });
+      const file = await entry.handle.getFile();
+      const wb = await XLSX.read(await file.arrayBuffer());
+      const bil = parseSAP(wb.Sheets[wb.SheetNames[0]]);
+      if (!bil) { err.push(period+': non riconosciuto'); continue; }
+      set(s=>({ bilanci: [...s.bilanci.filter(b=>b.period!==bil.period), bil].sort((a,b)=>a.period.localeCompare(b.period)) }));
+      ok++;
+    } catch(e) { err.push(period+': '+e.message); }
+  }
+  rImpTab();
+  const msg = ok ? '✓ '+ok+' periodo/i ricaricato/i.' : '';
+  const errMsg = err.length ? ' ⚠ '+err.join(', ') : '';
+  showMsg('msg-bil', ok?'ok':'err', msg+errMsg);
+}
+
+// Usa File System Access API per aprire file con handle
+async function pickBilFile() {
+  if (!window.showOpenFilePicker) {
+    document.getElementById('fi-bil').click(); return;
+  }
+  try {
+    const handles = await window.showOpenFilePicker({
+      multiple: true,
+      types: [{ description: 'SAP Excel', accept: { 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'] } }]
+    });
+    showMsg('msg-bil','info','Lettura file...');
+    let ok=0, err=[];
+    for (const handle of handles) {
+      try {
+        const file = await handle.getFile();
+        const wb = await XLSX.read(await file.arrayBuffer());
+        const bil = parseSAP(wb.Sheets[wb.SheetNames[0]]);
+        if (!bil) { err.push(handle.name+': formato non riconosciuto'); continue; }
+        set(s=>({ bilanci: [...s.bilanci.filter(b=>b.period!==bil.period), bil].sort((a,b)=>a.period.localeCompare(b.period)) }));
+        _fileHandles.set(bil.period, { handle, period: bil.period });
+        ok++;
+      } catch(e) { err.push(handle.name+': '+e.message); }
+    }
+    rImpTab();
+    const msg = ok ? '✓ '+ok+' bilancio/i importato/i — 🔄 ricarica automatica attiva.' : '';
+    const errMsg = err.length ? '<br>⚠ '+err.join('<br>') : '';
+    showMsg('msg-bil', ok?'ok':'err', msg+errMsg);
+  } catch(e) { if (e.name!=='AbortError') alert('Errore: '+e.message); }
+}
+
+// ── Cartella SAP ────────────────────────────────────────
+async function pickFolder() {
+  if (!window.showDirectoryPicker) {
+    alert("Il tuo browser non supporta la selezione cartella.\nUsa Chrome o Edge.");
+    return;
+  }
+  try {
+    const folder = await window.showDirectoryPicker({ mode: "read" });
+    _folderHandle = folder;
+    _folderName   = folder.name;
+    rImpTab();
+    await loadFromFolder(false);
+  } catch(e) {
+    if (e.name !== "AbortError") alert("Errore: " + e.message);
+  }
+}
+
+async function loadFromFolder(silent) {
+  if (!_folderHandle) { alert("Nessuna cartella selezionata."); return; }
+  const perm = await _folderHandle.queryPermission({ mode: "read" });
+  if (perm !== "granted") {
+    const req = await _folderHandle.requestPermission({ mode: "read" });
+    if (req !== "granted") { alert("Permesso negato."); return; }
+  }
+  if (!silent) showMsg("msg-bil","info","🔄 Lettura cartella …");
+  let ok=0, changed=0, skipped=0, errs=[];
+  for await (const [name, entry] of _folderHandle.entries()) {
+    if (entry.kind !== "file") continue;
+    if (!name.toLowerCase().endsWith(".xlsx")) continue;
+    if (name.startsWith("~$")) continue;
+    try {
+      const file = await entry.getFile();
+      const wb   = await XLSX.read(await file.arrayBuffer());
+      const sheetName = wb.SheetNames[0];
+      if (!sheetName || !wb.Sheets[sheetName]) { skipped++; continue; }
+      const bil  = parseSAP(wb.Sheets[sheetName]);
+      if (!bil) { skipped++; continue; }
+      set(s=>({ bilanci:[...s.bilanci.filter(b=>b.period!==bil.period),bil]
+                          .sort((a,b)=>a.period.localeCompare(b.period)) }));
+      _fileHandles.set(bil.period, { handle:entry, period:bil.period });
+      ok++; changed++;
+    } catch(e) { errs.push(name+": "+e.message); }
+  }
+  rImpTab();
+  if (!silent || changed>0) {
+    const msg = ok
+      ? "✓ "+ok+" file letti da \""+esc(_folderName||"")+"\""
+        +(changed?" — "+changed+" aggiornati":" — nessuna variazione")
+        +(skipped?" ("+skipped+" non SAP ignorati)":"")+"."
+      : "Nessun file SAP trovato nella cartella.";
+    const errMsg = errs.length?" ⚠ "+errs.join(", "):"";
+    showMsg("msg-bil", ok?"ok":"err", msg+errMsg);
+  }
+  if (ok>0) renderAll();
+}
+
+async function impMap(inp) {
+  const f=inp.files[0]; if(!f) return;
+  showMsg('msg-map','info','Lettura file...');
+  try {
+    let mapping, coa, struct=null;
+    if (f.name.toLowerCase().endsWith('.csv')) {
+      const rows = parseCSV(await f.text());
+      ({mapping,coa} = parseMappingCSV(rows));
+    } else {
+      const wb = await XLSX.read(await f.arrayBuffer());
+      const shMap = wb.SheetNames.find(n=>n.toLowerCase().includes('mapping')||n.toLowerCase().includes('civil'))
+                    || wb.SheetNames[1] || wb.SheetNames[0];
+      const shCoa = wb.SheetNames.find(n=>n.toLowerCase().includes('piano')) || wb.SheetNames[0];
+      const res = parseMappingExcel(wb.Sheets[shMap]);
+      mapping=res.mapping; coa=res.coa; struct=res.struct; // mapping già in formato {civD,civC,corpD,corpC}
+      // Se c'è anche un foglio piano conti separato, usa quello per i nomi
+      if (shCoa!==shMap) {
+        const coaRows=wb.Sheets[shCoa];
+        const first=coaRows[0]?.[0];
+        const start=(typeof first==='string'&&isNaN(Number(first)))?1:0;
+        const seen=new Set(); coa=[];
+        for(let i=start;i<coaRows.length;i++){
+          const r=coaRows[i]; if(!r||r[0]==null) continue;
+          const id=String(r[0]).trim(), name=String(r[1]||'').trim();
+          if(id&&!seen.has(id)){coa.push({id,name});seen.add(id);}
+        }
+      }
+    }
+    const nM=Object.keys(mapping).length;
+    if(!nM){showMsg('msg-map','err','Nessun mapping trovato.');inp.value='';return;}
+    set(s=>({
+      coa: coa.length>0 ? coa : s.coa,
+      mapping: {...s.mapping,...mapping},
+      civile: struct&&struct.length>0 ? struct : s.civile,
+    }));
+    const msgs=[`✓ Mapping: ${nM} conti`];
+    if(coa.length) msgs.push(`✓ Piano dei conti: ${coa.length} conti`);
+    if(struct&&struct.length) msgs.push(`✓ Struttura civile: ${struct.length} nodi`);
+    showMsg('msg-map','ok',msgs.join('<br>'));
+  } catch(e) { showMsg('msg-map','err','Errore: '+e.message); }
+  inp.value='';
+}
+
+// ══════════════════════════════════════════════════════════
+// STRUTTURE
+// ══════════════════════════════════════════════════════════
+function rStruct() {
+  document.getElementById('pg-struct').innerHTML=`
+    <div class="row"><div><p class="h1">Strutture</p><p class="sub">Gestisci le gerarchie di riclassificazione Civile e Corporate.</p></div></div>
+    <div class="sg">
+      <div id="s-civ"></div>
+      <div id="s-corp"></div>
+    </div>`;
+  renderSBox('civ','Struttura Civile',S.civile,'#f0fdf4','#bbf7d0','#14532d');
+  renderSBox('corp','Struttura Corporate',S.corporate,'#faf5ff','#e9d5ff','#581c87');
+}
+
+function renderSBox(key,title,struct,bg,border,col) {
+  const roots=struct.filter(n=>!n.parentId);
+  const el=document.getElementById('s-'+key);
+  el.className='sbox'; el.style.border=`1px solid ${border}`;
+  el.innerHTML=`
+    <div class="sbox-hd" style="background:${bg};border-bottom:1px solid ${border}">
+      <span style="font-weight:600;font-size:13px;color:${col}">${title} <span style="font-size:11px;font-weight:400;color:#a8a29e">${struct.length} nodi</span></span>
+      <div style="display:flex;gap:5px">
+        <label class="btn btn-sec btn-sm" style="cursor:pointer">⬆ Importa CSV
+          <input type="file" accept=".csv,.xlsx" class="hidden" onchange="importStruct('${key}',this)">
+        </label>
+        <button class="btn btn-sec btn-sm" onclick="exportStructCSV('${key}')">⬇ CSV</button>
+      </div>
+    </div>
+    <div class="sbox-add" style="border-bottom:1px solid ${border}">
+      <input type="text" id="sid-${key}" placeholder="ID" style="width:80px;font-size:11px">
+      <input type="text" id="snm-${key}" placeholder="Nome nodo" style="flex:1;font-size:11px">
+      <button class="btn btn-sm" style="background:${col};color:#fff;flex-shrink:0" onclick="addNode('${key}',null)">+ Radice</button>
+    </div>
+    <div class="sbox-bd">
+      ${roots.length===0?'<p style="text-align:center;color:#a8a29e;padding:20px;font-size:12px">Nessun nodo. Aggiungi o importa un CSV.</p>':
+        roots.map(n=>renderNode(key,struct,n,0,col)).join('')}
+    </div>`;
+}
+
+// Nodi espansi nella vista struttura
+const _sExpanded = {};
+function toggleSNode(key,nid){
+  if(!_sExpanded[key]) _sExpanded[key]=new Set();
+  if(_sExpanded[key].has(nid)) _sExpanded[key].delete(nid);
+  else _sExpanded[key].add(nid);
+  const cfg=key==='civ'
+    ?{t:'Struttura Civile',s:S.civile,bg:'#f0fdf4',br:'#bbf7d0',co:'#14532d'}
+    :{t:'Struttura Corporate',s:S.corporate,bg:'#faf5ff',br:'#e9d5ff',co:'#581c87'};
+  renderSBox(key,cfg.t,cfg.s,cfg.bg,cfg.br,cfg.co);
+}
+function renderNode(key,struct,node,lv,col) {
+  const ch=kids(struct,node.id);
+  if(!_sExpanded[key]) _sExpanded[key]=new Set();
+  // Radici (lv=0) sempre espanse; figli collassati di default
+  const isExpanded = lv===0 || _sExpanded[key].has(node.id);
+  const tog = ch.length
+    ? `<span onclick="event.stopPropagation();toggleSNode('${key}','${esc(node.id)}')" style="cursor:pointer;margin-right:3px;font-size:9px;color:${col}">${isExpanded?'▼':'▶'}</span>`
+    : '<span style="display:inline-block;width:13px"></span>';
+  return `<div class="sn">
+    <div class="sr" style="padding-left:${lv*16+8}px">
+      ${tog}
+      <span style="font-family:monospace;font-size:10px;color:#a8a29e;min-width:60px;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(node.id)}">${esc(node.id.length>14?node.id.slice(0,13)+'…':node.id)}</span>
+      <span style="font-size:12px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(node.name)}</span>
+      <div class="sa">
+        <button class="ib" title="Aggiungi figlio" onclick="addNodeChild('${key}','${esc(node.id)}')">➕</button>
+        <button class="ib" title="Elimina" style="color:#dc2626" onclick="delNode('${key}','${esc(node.id)}')">🗑</button>
+      </div>
+    </div>
+    ${isExpanded?ch.map(c=>renderNode(key,struct,c,lv+1,col)).join(''):''}
+  </div>`;
+}
+
+function addNode(key,parentId) {
+  const id=(document.getElementById('sid-'+key)?.value||'').trim();
+  const nm=(document.getElementById('snm-'+key)?.value||'').trim();
+  if(!id||!nm){alert('Inserisci ID e Nome');return;}
+  const struct=key==='civ'?[...S.civile]:[...S.corporate];
+  if(struct.some(n=>n.id===id)){alert('ID già presente');return;}
+  struct.push({id,name:nm,parentId:parentId||null});
+  if(key==='civ') set({civile:struct}); else set({corporate:struct});
+}
+function addNodeChild(key,parentId) {
+  const id=prompt('ID figlio di "'+parentId+'":'); if(!id) return;
+  const nm=prompt('Nome:'); if(!nm) return;
+  const struct=key==='civ'?[...S.civile]:[...S.corporate];
+  if(struct.some(n=>n.id===id)){alert('ID già presente');return;}
+  struct.push({id,name:nm,parentId});
+  if(key==='civ') set({civile:struct}); else set({corporate:struct});
+}
+function delNode(key,id) {
+  if(!confirm('Eliminare "'+id+'" e tutti i figli?')) return;
+  const orig=key==='civ'?S.civile:S.corporate;
+  const del=new Set([id]); let ch=true;
+  while(ch){ch=false;orig.forEach(n=>{if(n.parentId&&del.has(n.parentId)&&!del.has(n.id)){del.add(n.id);ch=true;}});}
+  const struct=orig.filter(n=>!del.has(n.id));
+  if(key==='civ') set({civile:struct}); else set({corporate:struct});
+}
+async function importStruct(key,inp) {
+  const f=inp.files[0]; if(!f) return;
+  try {
+    let rows;
+    if(f.name.toLowerCase().endsWith('.csv')) rows=parseCSV(await f.text());
+    else { const wb=await XLSX.read(await f.arrayBuffer()); rows=wb.Sheets[wb.SheetNames[0]]; }
+    const h=rows[0].map(c=>String(c||'').toLowerCase());
+    const si=h.some(c=>c==='id'||c==='codice'||c.includes('codice')||c==='a (codice)')?1:0;
+    const ic=h.findIndex(c=>c==='id'||c==='codice'||c.includes('codice')||c==='a (codice)'); const iID=ic>=0?ic:0;
+    const in2=h.findIndex(c=>c.includes('nome')||c.includes('descr')||c.includes('name')||c==='b (voce)'); const iNM=in2>=0?in2:1;
+    const ip=h.findIndex(c=>c.includes('parent')||c.includes('padre')||c==='c (parent)'); const iPR=ip>=0?ip:2;
+    const ifo=h.findIndex(c=>c.includes('formula')||c.includes('calcolo')||c.includes('tipo')||c==='d (tipocalcolo)'); const iFO=ifo>=0?ifo:3;
+    const out=[]; const seen=new Set();
+    for(let i=si;i<rows.length;i++){
+      const r=rows[i]; if(!r||!r[iID]) continue;
+      const id=String(r[iID]).trim(), nm=String(r[iNM]||'').trim();
+      const pr=r[iPR]?String(r[iPR]).trim():null;
+      const fo=r[iFO]?String(r[iFO]).trim():null;
+      const formula=(fo&&fo!=='Dettaglio'&&fo!=='')?fo:null;
+      if(id&&nm&&!seen.has(id)){out.push({id,name:nm,parentId:pr||null,formula:formula||undefined});seen.add(id);}
+    }
+    // Crea automaticamente nodi radice mancanti (referenziati come parent ma non dichiarati)
+    const outIds = new Set(out.map(n=>n.id));
+    const missingRoots = new Set();
+    out.forEach(n=>{ if(n.parentId && !outIds.has(n.parentId)) missingRoots.add(n.parentId); });
+    missingRoots.forEach(id=>{ out.unshift({id, name:id, parentId:null}); });
+    if(!out.length){alert('Nessun nodo trovato');inp.value='';return;}
+    if(!confirm(`Trovati ${out.length} nodi. Sostituire la struttura ${key==='civ'?'Civile':'Corporate'}?`)){inp.value='';return;}
+    if(key==='civ') { set({civile:out}); renderSBox('civ','Struttura Civile',out,'#f0fdf4','#bbf7d0','#14532d'); }
+    else { set({corporate:out}); renderSBox('corp','Struttura Corporate',out,'#faf5ff','#e9d5ff','#581c87'); }
+  } catch(e){alert('Errore: '+e.message);}
+  inp.value='';
+}
+function exportStructCSV(key) {
+  const struct=key==='civ'?S.civile:S.corporate;
+  const rows=['ID,Nome,ParentID,Formula',...struct.map(n=>[n.id,n.name,n.parentId||'',n.formula||''].map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(','))];
+  const a=document.createElement('a');
+  a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(rows.join('\n'));
+  a.download=`struttura_${key}.csv`; a.click();
+}
+
+// ══════════════════════════════════════════════════════════
+// MAPPING CONTI
+// ══════════════════════════════════════════════════════════
+let mapSrch='', mapFilt='all';
+let _openDrop=null;
+
+function rMap() {
+  const total=S.coa.length;
+  const nCiv=S.coa.filter(a=>S.mapping[a.id]?.civD).length;
+  const nCorp=S.coa.filter(a=>S.mapping[a.id]?.corpD).length;
+
+  const nCoaM=S.coa.length;
+  const nMCiv=S.coa.filter(a=>S.mapping[a.id]?.civD||S.mapping[a.id]?.civC).length;
+  const nMCorp=S.coa.filter(a=>S.mapping[a.id]?.corpD||S.mapping[a.id]?.corpC).length;
+  const pMCiv=nCoaM?Math.round(nMCiv/nCoaM*100):0;
+  const pMCorp=nCoaM?Math.round(nMCorp/nCoaM*100):0;
+  document.getElementById('pg-map').innerHTML=`
+    <div class="row">
+      <div><p class="h1">Mapping Conti</p><p class="sub">Collega ogni conto a un nodo della struttura.</p></div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+        <button class="btn btn-sec btn-sm" onclick="expMapCSV()">⬇ Esporta CSV</button>
+        <label class="btn btn-sec btn-sm" style="cursor:pointer">⬆ Importa CSV/XLSX<input type="file" accept=".csv,.xlsx" class="hidden" onchange="impMapCSV(this)"></label>
+        <span style="display:inline-block;width:1px;height:20px;background:#e7e5e4;margin:0 3px;flex-shrink:0"></span>
+        <button class="btn btn-sm" style="background:#f0fdf4;color:#166534;border:1px solid #bbf7d0;font-weight:600" onclick="clearMapping('civ')">🗑 Azzera Civile</button>
+        <button class="btn btn-sm" style="background:#faf5ff;color:#6b21a8;border:1px solid #e9d5ff;font-weight:600" onclick="clearMapping('corp')">🗑 Azzera Corporate</button>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;margin-bottom:12px">
+      <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:10px 13px">
+        <p style="font-size:10px;color:#78716c;margin-bottom:2px">Conti totali</p>
+        <p style="font-size:18px;font-weight:700;font-family:monospace;color:#1d4ed8">${total}</p>
+      </div>
+      <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:10px 13px">
+        <p style="font-size:10px;color:#78716c;margin-bottom:2px">📊 Civile</p>
+        <p style="font-size:18px;font-weight:700;font-family:monospace;color:#15803d">${pMCiv}%</p>
+        <div class="bar" style="margin-top:4px"><div class="bar-f" style="width:${pMCiv}%;background:#22c55e"></div></div>
+        <p style="font-size:10px;color:#a8a29e;margin-top:2px">${nMCiv} / ${nCoaM}</p>
+      </div>
+      <div style="background:#faf5ff;border:1px solid #e9d5ff;border-radius:10px;padding:10px 13px">
+        <p style="font-size:10px;color:#78716c;margin-bottom:2px">🏢 Corporate</p>
+        <p style="font-size:18px;font-weight:700;font-family:monospace;color:#7e22ce">${pMCorp}%</p>
+        <div class="bar" style="margin-top:4px"><div class="bar-f" style="width:${pMCorp}%;background:#a855f7"></div></div>
+        <p style="font-size:10px;color:#a8a29e;margin-top:2px">${nMCorp} / ${nCoaM}</p>
+      </div>
+      <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:10px 13px">
+        <p style="font-size:10px;color:#78716c;margin-bottom:2px">✓ Completi</p>
+        <p style="font-size:18px;font-weight:700;font-family:monospace;color:#b45309">${S.coa.filter(a=>(S.mapping[a.id]?.civD||S.mapping[a.id]?.civC)&&(S.mapping[a.id]?.corpD||S.mapping[a.id]?.corpC)).length}/${total}</p>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:10px;align-items:center">
+      <input type="text" placeholder="Cerca codice o nome..." value="${esc(mapSrch)}" oninput="mapSrch=this.value;rMapRows()" style="max-width:280px">
+      <select style="width:auto" onchange="mapFilt=this.value;rMapRows()">
+        <option value="all"${mapFilt==='all'?' selected':''}>Tutti</option>
+        <option value="inc"${mapFilt==='inc'?' selected':''}>Incompleti</option>
+        <option value="done"${mapFilt==='done'?' selected':''}>Completati</option>
+      </select>
+      <span style="font-size:11px;color:#a8a29e" id="map-cnt"></span>
+    </div>
+    ${total===0?`<div class="alert warn">⚠ Nessun piano dei conti caricato. Vai su "Importa dati".</div>`:`
+    <div class="mt">
+      <div class="mh">
+        <div></div><div>Codice</div><div>Nome</div>
+        <div style="background:rgba(240,253,244,.7);border-left:2px solid #bbf7d0;color:#15803d;font-size:9px">CIV DARE</div>
+        <div style="background:rgba(240,253,244,.7);border-left:1px solid #bbf7d0;color:#15803d;font-size:9px">CIV AVERE</div>
+        <div style="background:rgba(250,245,255,.7);border-left:2px solid #e9d5ff;color:#7e22ce;font-size:9px">CORP DARE</div>
+        <div style="background:rgba(250,245,255,.7);border-left:1px solid #e9d5ff;color:#7e22ce;font-size:9px">CORP AVERE</div>
+      </div>
+      <div class="mb" id="map-rows"></div>
+    </div>`}`;
+  rMapRows();
+}
+
+function rMapRows() {
+  const el=document.getElementById('map-rows'); if(!el) return;
+  const lo=mapSrch.toLowerCase();
+  const filt=S.coa.filter(a=>{
+    if(lo&&!a.id.toLowerCase().includes(lo)&&!a.name.toLowerCase().includes(lo)) return false;
+    const m=S.mapping[a.id]||{};
+    const hasCiv=!!(m.civD||m.civC), hasCorp=!!(m.corpD||m.corpC);
+    if(mapFilt==='done'&&!(hasCiv&&hasCorp)) return false;
+    if(mapFilt==='inc'&&hasCiv&&hasCorp) return false;
+    return true;
+  });
+  const cnt=document.getElementById('map-cnt');
+  if(cnt) cnt.textContent=filt.length+' conti';
+  if(!filt.length){el.innerHTML='<p style="text-align:center;padding:24px;color:#a8a29e;font-size:12px">Nessun conto trovato.</p>';return;}
+  el.innerHTML=filt.map(a=>{
+    const m=S.mapping[a.id]||{};
+    const hasCiv=!!(m.civD||m.civC), hasCorp=!!(m.corpD||m.corpC);
+    const ok=hasCiv&&hasCorp, half=(hasCiv||hasCorp)&&!ok;
+    const ic=ok?'<span style="color:#22c55e;font-size:14px">✓</span>':half?'<span style="color:#f59e0b;font-size:14px">◑</span>':'<span style="color:#d6d3d1;font-size:14px">○</span>';
+    return `<div class="mr">
+      <div style="text-align:center">${ic}</div>
+      <div><span class="mono" style="font-size:12px">${esc(a.id)}</span></div>
+      <div style="font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(a.name)}">${esc(a.name)}</div>
+      <div style="background:rgba(240,253,244,.4);border-left:2px solid #bbf7d0">${mkSel(a.id,'civD',S.civile,m.civD||'')}</div>
+      <div style="background:rgba(240,253,244,.25);border-left:1px solid #bbf7d0">${mkSel(a.id,'civC',S.civile,m.civC||'')}</div>
+      <div style="background:rgba(250,245,255,.4);border-left:2px solid #e9d5ff">${mkSel(a.id,'corpD',S.corporate,m.corpD||'')}</div>
+      <div style="background:rgba(250,245,255,.25);border-left:1px solid #e9d5ff">${mkSel(a.id,'corpC',S.corporate,m.corpC||'')}</div>
+    </div>`;
+  }).join('');
+}
+
+function mkSel(accountId,field,struct,value) {
+  const node=struct.find(n=>n.id===value||n.id.startsWith(value+' '));
+  const label=node?(node.id.length>22?node.id.slice(0,20)+'…':node.id):(value||'—');
+  const uid=`sel_${accountId}_${field}`;
+  return `<div class="sw" id="wrap_${uid}">
+    <button type="button" class="sb2${value?' cv':''}" onclick="toggleDrop('${uid}','${esc(accountId)}','${field}')" title="${esc(node?.name||'')}">
+      <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px">${esc(label)}</span>
+      <span style="display:flex;align-items:center;gap:2px;flex-shrink:0">
+        ${value?`<span onclick="event.stopPropagation();setMap('${esc(accountId)}','${field}','')" style="font-size:10px;cursor:pointer">✕</span>`:''}▾
+      </span>
+    </button>
+  </div>`;
+}
+
+function toggleDrop(uid,accountId,field) {
+  if(_openDrop&&_openDrop!==uid){document.getElementById('drop_'+_openDrop)?.remove();}
+  if(document.getElementById('drop_'+uid)){document.getElementById('drop_'+uid).remove();_openDrop=null;return;}
+  _openDrop=uid;
+  const struct=(field==='civD'||field==='civC')?S.civile:S.corporate;
+  const wrap=document.getElementById('wrap_'+uid); if(!wrap) return;
+  const drop=document.createElement('div');
+  drop.className='sd'; drop.id='drop_'+uid;
+  const si=document.createElement('input'); si.type='text'; si.placeholder='Cerca...';
+  si.oninput=()=>fillDrop(drop,struct,accountId,field,si.value);
+  drop.appendChild(si);
+  const list=document.createElement('div'); list.className='sl'; drop.appendChild(list);
+  wrap.appendChild(drop);
+  fillDrop(drop,struct,accountId,field,'');
+  si.focus();
+  setTimeout(()=>document.addEventListener('click',function h(e){
+    if(!drop.contains(e.target)&&!wrap.contains(e.target)){drop.remove();_openDrop=null;document.removeEventListener('click',h);}
+  }),0);
+}
+
+function fillDrop(drop,struct,accountId,field,search) {
+  const list=drop.querySelector('.sl'); if(!list) return;
+  const cur=(S.mapping[accountId]||{})[field]||'';
+  const lo=search.toLowerCase();
+  const vis=lo?struct.filter(n=>n.id.toLowerCase().includes(lo)||n.name.toLowerCase().includes(lo)):struct;
+  if(!vis.length){list.innerHTML='<div style="text-align:center;color:#a8a29e;padding:8px;font-size:11px">Nessun risultato</div>';return;}
+  // In search mode: mostra tutto piatto; altrimenti albero collassato
+  if(lo) {
+    list.innerHTML=vis.map(n=>{
+      const isSel=n.id===cur;
+      return `<div class="so${isSel?' sel':''}" style="padding-left:9px" onclick="setMap('${esc(accountId)}','${field}','${esc(n.id)}')">
+        <span style="font-family:monospace;font-size:10px;color:#a8a29e;min-width:50px;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(n.id.length>14?n.id.slice(0,13)+'…':n.id)}</span>
+        <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(n.name)}</span>
+        ${isSel?'<span>✓</span>':''}
+      </div>`;
+    }).join('');
+    return;
+  }
+  // Albero con expand lazy — solo radici visibili, figli caricati al click
+  const dropExp=new Set(); // espansi in questo dropdown
+  // Se il nodo corrente è selezionato, espandi il suo path
+  if(cur) {
+    let n=struct.find(x=>x.id===cur);
+    while(n&&n.parentId){const p=struct.find(x=>x.id===n.parentId);if(p){dropExp.add(p.id);}n=p;}
+  }
+  function nodeHTML(n,lv) {
+    const isSel=n.id===cur;
+    const ch=struct.filter(c=>c.parentId===n.id);
+    const isExp=lv===0||dropExp.has(n.id);
+    const tog=ch.length
+      ? `<span class="dtog" data-nid="${esc(n.id)}" style="cursor:pointer;margin-right:3px;font-size:9px;color:#94a3b8">${isExp?'▼':'▶'}</span>`
+      : '<span style="display:inline-block;width:11px"></span>';
+    return `<div class="so${isSel?' sel':''}" style="padding-left:${lv*12+9}px" onclick="setMap('${esc(accountId)}','${field}','${esc(n.id)}')">
+      ${tog}
+      <span style="font-family:monospace;font-size:10px;color:#a8a29e;min-width:50px;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(n.id.length>14?n.id.slice(0,13)+'…':n.id)}</span>
+      <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(n.name)}</span>
+      ${isSel?'<span style="color:#22c55e">✓</span>':''}
+    </div>${isExp?ch.map(c=>nodeHTML(c,lv+1)).join(''):''}`;
+  }
+  const roots=struct.filter(n=>!n.parentId);
+  list.innerHTML=roots.map(r=>nodeHTML(r,0)).join('');
+  // Click sui toggle espande/collassa senza chiudere il dropdown
+  list.querySelectorAll('.dtog').forEach(tog=>{
+    tog.addEventListener('click',e=>{
+      e.stopPropagation();
+      const nid=tog.dataset.nid;
+      if(dropExp.has(nid)) dropExp.delete(nid); else dropExp.add(nid);
+      // Ricostruisci solo la lista
+      list.innerHTML=roots.map(r=>nodeHTML(r,0)).join('');
+      list.querySelectorAll('.dtog').forEach(t2=>{
+        t2.addEventListener('click',e2=>{
+          e2.stopPropagation();
+          const nid2=t2.dataset.nid;
+          if(dropExp.has(nid2)) dropExp.delete(nid2); else dropExp.add(nid2);
+          list.innerHTML=roots.map(r=>nodeHTML(r,0)).join('');
+        });
+      });
+    });
+  });
+}
+
+function setMap(accountId,field,value) {
+  set(s=>({mapping:{...s.mapping,[accountId]:{...(s.mapping[accountId]||{}),[field]:value}}}));
+  document.getElementById('drop_'+'sel_'+accountId+'_'+field)?.remove();
+  _openDrop=null;
+  // Aggiorna il pulsante della cella senza ricaricare tutta la tabella
+  const uid='sel_'+accountId+'_'+field;
+  const wrap=document.getElementById('wrap_'+uid);
+  if(wrap) {
+    const struct=(field==='civD'||field==='civC')?S.civile:S.corporate;
+    wrap.outerHTML=mkSel(accountId,field,struct,value);
+  }
+}
+
+function clearMapping(which) {
+  const label  = which==='civ' ? 'Civile (Dare + Avere)' : 'Corporate (Dare + Avere)';
+  const fields = which==='civ' ? ['civD','civC'] : ['corpD','corpC'];
+  const count  = S.coa.filter(a => fields.some(f => S.mapping[a.id]?.[f])).length;
+  if (count === 0) { alert('La mappatura ' + label + ' è già vuota.'); return; }
+  if (!confirm(
+    'Cancellare tutta la mappatura ' + label + '?\n\n' +
+    count + ' conti verranno azzerati.\n\n' +
+    'Questa operazione non è reversibile.'
+  )) return;
+  const newMap = {};
+  S.coa.forEach(a => {
+    const m = { ...(S.mapping[a.id] || {}) };
+    fields.forEach(f => { m[f] = ''; });
+    newMap[a.id] = m;
+  });
+  S.mapping = newMap;
+  rMap();
+  // feedback inline
+  const _fb=document.createElement('div');
+  _fb.className='alert ok';
+  _fb.style.cssText='margin:8px 0;transition:opacity .5s';
+  _fb.textContent='✓ Mappatura '+label+' azzerata — '+count+' conti resettati.';
+  const _pg=document.getElementById('pg-map');
+  if(_pg&&_pg.children[1]){_pg.insertBefore(_fb,_pg.children[1]);setTimeout(()=>{_fb.style.opacity='0';setTimeout(()=>_fb.remove(),500);},3000);}
+}
+
+function expMapCSV() {
+  const rows=['ID Conto;Nome Conto;Civ Dare;Civ Avere;Corp Dare;Corp Avere'];
+  S.coa.forEach(a=>{
+    const m=S.mapping[a.id]||{};
+    rows.push([a.id,a.name,m.civD||'',m.civC||'',m.corpD||'',m.corpC||''].map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(';'));
+  });
+  const a=document.createElement('a');
+  a.href='data:text/csv;charset=utf-8,\uFEFF'+encodeURIComponent(rows.join('\n'));
+  a.download='mapping_'+new Date().toISOString().slice(0,10)+'.csv'; a.click();
+}
+
+async function impMapCSV(inp) {
+  const f=inp.files[0]; if(!f) return;
+  try {
+    let rows;
+    if(f.name.toLowerCase().endsWith('.xlsx')) {
+      const wb=await XLSX.read(await f.arrayBuffer());
+      rows=wb.Sheets[wb.SheetNames[0]];
+    } else {
+      rows=parseCSV(await f.text());
+    }
+    const {mapping,coa}=parseMappingCSV(rows);
+    const n=Object.keys(mapping).length;
+    if(!n){alert('Nessun mapping trovato. Assicurati che le colonne siano: ID, Nome, Civ Dare, Civ Avere, Corp Dare, Corp Avere');inp.value='';return;}
+    const existing=Object.keys(S.mapping).length;
+    set(s=>({mapping:{...s.mapping,...mapping},coa:s.coa.length>0?s.coa:coa}));
+    rMap();
+    alert('✓ Importati '+n+' mapping'+(existing?' (aggiunti a '+existing+' esistenti)':'')+'. Totale: '+Object.keys(S.mapping).length+'.');
+  } catch(ex){alert('Errore: '+ex.message);}
+  inp.value='';
+}
+
+// ══════════════════════════════════════════════════════════
+// REPORT
+// ══════════════════════════════════════════════════════════
+let rptType='civ';
+let rptMode='ytd';
+let rptPeriods=[];
+let rptExpand=true;
+let rptGroupQ=false;   // raggruppamento per quarter
+const rptCollapsed=new Set(); // IDs nodi collassati
+
+// Ricostruisce l'intera pagina report (solo alla prima apertura o cambio tipo)
+function rReport() {
+  const allP=S.bilanci.map(b=>b.period);
+  if(!rptPeriods.length&&allP.length) rptPeriods=[...allP];
+
+  function grp(children) {
+    return `<div style="display:flex;gap:2px;background:#e7e5e4;padding:2px;border-radius:7px">${children}</div>`;
+  }
+  function tb(label,active,onclick,title='') {
+    return `<button class="btn btn-sm ${active?'btn-on':'btn-off'}" onclick="${onclick}"${title?` title="${title}"`:''}>${label}</button>`;
+  }
+
+  document.getElementById('pg-report').innerHTML=`
+    <div id="rpt-outer">
+      <div id="rpt-controls" style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+          ${grp(
+            tb('📊 Civile',   rptType==='civ',  "rptType='civ';rReport()")+
+            tb('🏢 Corporate',rptType==='corp', "rptType='corp';rReport()")
+          )}
+          ${grp(
+            tb('YTD',rptMode==='ytd',"setMode('ytd')","Saldo finale")+
+            tb('PTD',rptMode==='ptd',"setMode('ptd')","Saldo finale − iniziale")
+          )}
+          ${allP.length?grp(
+            allP.map(p=>tb(esc(p),rptPeriods.includes(p),`togglePeriod('${esc(p)}')`)).join('')+
+            (allP.length>1?`<button class="btn btn-sm btn-off" onclick="selAllP()" title="Seleziona tutti">Tutti</button>`:'')
+          ):''}
+          ${grp(tb('≡ Conti',rptExpand,"toggleExpand()"))}
+          ${grp(tb('📅 Quarter',rptGroupQ,"toggleGroupQ()","Aggrega per quarter fiscale (Q1=Apr-Giu, Q2=Lug-Set, Q3=Ott-Dic, Q4=Gen-Mar)"))}
+        </div>
+        <div style="display:flex;gap:5px">
+          <button class="btn btn-sm btn-off no-print" onclick="expRptCSV()">⬇ CSV</button>
+          <button class="btn btn-sm btn-off no-print" onclick="printBilancio()">🖨 Stampa</button>
+        </div>
+      </div>
+        ${S.bilanci.length===0
+        ?`<div class="alert warn" style="margin-top:10px">⚠ Nessun bilancio caricato. Vai su "Importa dati".</div>`
+        :`<div class="print-header" style="margin-bottom:12px">
+        <h2>Serom Medical Technology s.r.l.</h2>
+        <p id="print-subtitle">Bilancio riclassificato</p>
+        <hr>
+      </div>
+      <div id="rpt-scroll"><table class="rpt-tbl" id="rpt-tbl"></table></div>`}
+    </div>`;
+  rRptTable();
+}
+
+function setMode(m)    { rptMode=m;    rUpdControls(); rRptTable(); }
+function toggleExpand(){ rptExpand=!rptExpand; rUpdControls(); rRptTable(); }
+function toggleGroupQ(){ rptGroupQ=!rptGroupQ; rUpdControls(); rRptTable(); }
+function selAllP()     { rptPeriods=[...S.bilanci.map(b=>b.period)]; rUpdControls(); rRptTable(); }
+
+function togglePeriod(p) {
+  if(rptPeriods.includes(p)) { if(rptPeriods.length===1) return; rptPeriods=rptPeriods.filter(x=>x!==p); }
+  else rptPeriods=[...rptPeriods,p].sort();
+  rUpdControls();
+  rRptTable();
+}
+
+// Aggiorna solo i colori dei pulsanti senza ricostruire la pagina
+function rUpdControls() {
+  const allP=S.bilanci.map(b=>b.period);
+  document.querySelectorAll('#rpt-controls button').forEach(b=>{
+    const t=b.textContent.trim().replace(/[📊🏢]/g,'').trim();
+    let active=false;
+    if(t==='Civile'||t==='📊 Civile')   active=rptType==='civ';
+    else if(t==='Corporate'||t==='🏢 Corporate') active=rptType==='corp';
+    else if(t==='YTD')   active=rptMode==='ytd';
+    else if(t==='PTD')   active=rptMode==='ptd';
+    else if(t==='≡ Conti') active=rptExpand;
+    else if(t==='📅 Quarter') active=rptGroupQ;
+    else if(allP.includes(b.textContent.trim())) active=rptPeriods.includes(b.textContent.trim());
+    else return; // Tutti, CSV, Stampa — non toccare
+    b.className='btn btn-sm '+(active?'btn-on':'btn-off');
+  });
+}
+
+// Collasso: nasconde/mostra ricorsivamente tutti i discendenti DOM
+function toggleCollapse(nodeId) {
+  if(rptCollapsed.has(nodeId)) rptCollapsed.delete(nodeId);
+  else rptCollapsed.add(nodeId);
+  applyCollapse();
+}
+
+function applyCollapse() {
+  // Calcola quali righe devono essere nascoste (un antenato è collassato)
+  const tbl=document.getElementById('rpt-tbl'); if(!tbl) return;
+  tbl.querySelectorAll('tr[data-nid],tr[data-acc]').forEach(tr=>{
+    // Risali la catena dei data-parent
+    let cur=tr.dataset.par||'';
+    let hidden=false;
+    while(cur) {
+      if(rptCollapsed.has(cur)){hidden=true;break;}
+      const parent=tbl.querySelector(`tr[data-nid="${CSS.escape(cur)}"]`);
+      cur=parent?.dataset.par||'';
+    }
+    tr.classList.toggle('r-hidden',hidden);
+  });
+  // Aggiorna triangoli
+  tbl.querySelectorAll('[data-tog]').forEach(el=>{
+    el.textContent=rptCollapsed.has(el.dataset.tog)?'▶':'▼';
+  });
+}
+
+function rRptTable() {
+  // Salva posizione scroll prima di ricostruire
+  const _scr = document.getElementById('rpt-scroll');
+  const _scrollTop  = _scr ? _scr.scrollTop  : 0;
+  const _scrollLeft = _scr ? _scr.scrollLeft : 0;
+  const struct  = rptType==='civ' ? S.civile : S.corporate;
+  const mapKey  = rptType==='civ' ? 'civ' : 'corp';
+  const selBils = S.bilanci.filter(b=>rptPeriods.includes(b.period));
+  // Ultimo periodo per semaforo riconciliazione
+  const _lastP = S.bilanci.length ? S.bilanci[S.bilanci.length-1].period : null;
+  function _reconLight(nid) {
+    if (!_lastP) return '';
+    const key = nid+'::'+ _lastP;
+    const voci = S.recon[key];
+    if (!voci || !voci.length) return ''; // nessuna voce = niente semaforo
+    const bilLast = S.bilanci.find(b=>b.period===_lastP);
+    const saldo = bilLast ? getBalanceYTD(bilLast, nid) : 0;
+    const tot = voci.reduce((s,v)=>s+(v.segno==='+'?1:-1)*(v.importo||0), 0);
+    const inQ = Math.abs(saldo - tot) < 0.005;
+    const scarto = inQ ? '' : ' Scarto: '+fmt(saldo-tot);
+    return `<span onclick="event.stopPropagation();goRecon('${esc(nid)}')" title="${inQ?'Riconciliazione OK':'Non quadra'+scarto}" style="cursor:pointer;font-size:13px;line-height:1;flex-shrink:0;margin-left:4px">${inQ?'🟢':'🔴'}</span>`;
+  }
+  const tbl = document.getElementById('rpt-tbl');
+
+  // Quarter fiscale: Q1=Apr-Giu, Q2=Lug-Set, Q3=Ott-Dic, Q4=Gen-Mar
+  // Restituisce {fy, q} per un period string 'YYYY-MM-...' 
+  function bilQuarter(period) {
+    const [y,m] = periodYM(period).split('-').map(Number);
+    const fy = m>=4?y:y-1;
+    const mOff = m>=4?m-4:m+8; // 0=apr,1=mag,...,11=mar
+    const q = Math.floor(mOff/3)+1; // 1..4
+    return {fy, q};
+  }
+  function qLabel(fy,q){
+    const ends={1:'Giu',2:'Set',3:'Dic',4:'Mar'};
+    const endY=q===4?fy+1:fy;
+    return `Q${q} ${fy}/${String(fy+1).slice(2)} (al ${ends[q]} ${endY})`;
+  }
+
+  // Colonne effettive: mesi singoli o quarters aggregati
+  // Ogni colonna ha {label, bils:[...bilanci], isQ:bool}
+  const cols = (() => {
+    if(!rptGroupQ) return selBils.map(b=>({label:b.period, bils:[b], isQ:false}));
+    // Raggruppa per (fy,q), mantieni ordine cronologico
+    const groups=new Map();
+    selBils.forEach(b=>{
+      const {fy,q}=bilQuarter(b.period);
+      const k=`${fy}-Q${q}`;
+      if(!groups.has(k)) groups.set(k,{fy,q,bils:[]});
+      groups.get(k).bils.push(b);
+    });
+    return [...groups.values()].map(({fy,q,bils})=>({label:qLabel(fy,q), bils, isQ:true}));
+  })();
+
+  // colVal: valore di una colonna per un conto/nodo
+  // YTD quarter = saldo dell'ultimo mese del quarter disponibile
+  // PTD quarter = somma dei PTD mensili del quarter
+  function colNodeTotal(col, nodeId) {
+    if(!col.isQ || rptMode==='ptd') {
+      // PTD: somma movimenti di tutti i mesi del quarter
+      // singolo mese: valore diretto
+      return col.bils.reduce((s,b)=>s+nodeTotal(struct,S.mapping,mapKey,b,nodeId,rptMode),0);
+    }
+    // YTD quarter: saldo dell'ultimo mese disponibile nel quarter
+    const last=col.bils[col.bils.length-1];
+    return nodeTotal(struct,S.mapping,mapKey,last,nodeId,'ytd');
+  }
+  function colBalance(col, accountId) {
+    if(!col.isQ || rptMode==='ptd') {
+      return col.bils.reduce((s,b)=>s+getBalance(b,accountId,rptMode),0);
+    }
+    const last=col.bils[col.bils.length-1];
+    return getBalanceYTD(last,accountId);
+  }
+  if (!tbl) return;
+
+  if (!struct.length) {
+    tbl.innerHTML=`<tr><td colspan="99" style="padding:28px;text-align:center;color:#a8a29e">
+      Struttura ${rptType==='civ'?'Civile':'Corporate'} non caricata — vai su Strutture.</td></tr>`;
+    rRptKPI(struct,mapKey,selBils); return;
+  }
+  if (!selBils.length) {
+    tbl.innerHTML=`<tr><td colspan="99" style="padding:28px;text-align:center;color:#a8a29e">Nessun periodo selezionato.</td></tr>`;
+    rRptKPI(struct,mapKey,selBils); return;
+  }
+
+  const ncols=2+cols.length;
+  function colHdr(col){
+    if(col.isQ) {
+      const modeL=rptMode==='ytd'?'YTD':'PTD somma';
+      return `${esc(col.label)}<br><span style="font-weight:400;font-size:9px;opacity:.45">${modeL}</span>`;
+    }
+    const b=col.bils[0];
+    if(rptMode==='ytd') return `${esc(b.period)}<br><span style="font-weight:400;font-size:9px;opacity:.45">YTD · AF ${esc(fiscalYearStart(b.period))}</span>`;
+    const pv=prevBilancio(b);
+    return `${esc(b.period)}<br><span style="font-weight:400;font-size:9px;opacity:.45">PTD vs ${pv?esc(periodYM(pv.period)):'ini AF'}</span>`;
+  }
+  const thead=`<thead><tr>
+    <th style="text-align:left;min-width:100px;position:sticky;left:0;z-index:3;background:#f8fafc">Codice</th>
+    <th style="text-align:left;min-width:180px;position:sticky;left:100px;z-index:3;background:#f8fafc">Voce</th>
+    ${cols.map(c=>`<th style="min-width:120px">${colHdr(c)}</th>`).join('')}
+    <th style="min-width:150px;text-align:left;color:#64748b;font-size:10px">Note / ⚖</th>
+  </tr></thead>`;
+
+  const rows=[];
+
+  function addNode(node, parentId) {
+    const ch    = kids(struct,node.id);
+    const lv    = depth(struct,node.id);
+    const cls   = lv===0?'r-sec':lv===1?'r-grp':'r-nod';
+    const pad   = lv*14+6;
+    const bals  = cols.map(c=>colNodeTotal(c,node.id));
+    const kD=mapKey==='civ'?'civD':'corpD', kC=mapKey==='civ'?'civC':'corpC';
+    const hasKids= ch.length>0 || (rptExpand && S.coa.some(a=>{
+      const m2=S.mapping[a.id]; if(!m2) return false;
+      return resolveNode(struct,m2[kD])===node.id||resolveNode(struct,m2[kC])===node.id;
+    }));
+    const isColl = rptCollapsed.has(node.id);
+    const tog   = hasKids
+      ? `<span data-tog="${esc(node.id)}" onclick="event.stopPropagation();toggleCollapse('${esc(node.id)}')"
+           style="display:inline-block;width:12px;font-size:9px;cursor:pointer;opacity:.6;flex-shrink:0">${isColl?'▶':'▼'}</span>`
+      : `<span style="display:inline-block;width:12px"></span>`;
+    const hidden = parentId && isAncestorCollapsed(parentId);
+
+    // Stile cella per livello
+    const codeColor = lv===0?'#3b82f6':lv===1?'#64748b':'#94a3b8';
+    const codeSz    = lv===0?'12':lv===1?'11':'11';
+    const valSz     = lv===0?'16':lv===1?'14':'13';
+    const valFw     = lv===0?'800':lv===1?'600':'500';
+    rows.push(`<tr class="${cls}${hidden?' r-hidden':''}" data-nid="${esc(node.id)}" data-par="${esc(parentId||'')}"
+        onclick="toggleCollapse('${esc(node.id)}')" style="cursor:${hasKids?'pointer':'default'}">
+      <td style="padding-left:${pad}px;position:sticky;left:0;z-index:1;background:var(--row-bg,#fff)">
+        <span style="display:inline-flex;align-items:center;gap:3px">
+          ${tog}<span style="font-family:monospace;font-size:${codeSz}px;color:${codeColor}">${esc(node.id.length>20?node.id.slice(0,18)+'…':node.id)}</span>
+        </span>
+      </td>
+      <td style="position:sticky;left:100px;z-index:1;background:var(--row-bg,#fff)">${esc(node.name)}</td>
+      ${bals.map(v=>`<td class="${cn(v)}" style="font-family:monospace;font-size:${valSz}px;font-weight:${valFw}">${v!==0?fmt(v):'—'}</td>`).join('')}
+      <td></td>
+    </tr>`);
+
+    // Conti diretti (se espanso)
+    if(rptExpand) {
+      S.coa.forEach(a=>{
+        const m2=S.mapping[a.id]; if(!m2) return;
+        const kD=mapKey==='civ'?'civD':'corpD', kC=mapKey==='civ'?'civC':'corpC';
+        const r1=resolveNode(struct,m2[kD]), r2=resolveNode(struct,m2[kC]);
+        if(r1!==node.id && r2!==node.id) return;
+        const aBals=cols.map(c=>colBalance(c,a.id));
+        if(!aBals.some(v=>v!==0)) return;
+        const hAcc = isColl || hidden;
+        rows.push(`<tr class="r-acc${hAcc?' r-hidden':''}" data-acc="1" data-par="${esc(node.id)}">
+          <td style="padding-left:${pad+22}px;font-family:monospace;font-size:12px;color:#94a3b8;position:sticky;left:0;z-index:1;background:var(--row-bg,#fff)">${esc(a.id)}</td>
+          <td style="font-size:12px;color:#64748b;position:sticky;left:100px;z-index:1;background:var(--row-bg,#fff)">${esc(a.name)}</td>
+          ${aBals.map(v=>`<td class="${cn(v)}" style="font-family:monospace;font-size:12px">${v!==0?fmt(v):'—'}</td>`).join('')}
+          <td style="padding:2px 6px;white-space:nowrap" onclick="event.stopPropagation()">
+            <span style="display:inline-flex;align-items:center;gap:4px">
+              <input type="text" value="${esc(S.notes[a.id]||'')}"
+                oninput="S.notes['${esc(a.id)}']=this.value;save()"
+                placeholder="nota…"
+                style="width:110px;font-size:10px;padding:2px 5px;border:1px solid #e2e8f0;border-radius:4px;background:transparent;color:#334155"
+                onfocus="this.style.borderColor='#3b82f6'" onblur="this.style.borderColor='#e2e8f0'">
+              <button title="Riconciliazione" onclick="event.stopPropagation();goRecon('${esc(a.id)}')"
+                style="background:none;border:none;cursor:pointer;font-size:13px;color:#bfdbfe;padding:1px 4px;border-radius:3px"
+                onmouseenter="this.style.color='#3b82f6';this.style.background='#eff6ff'"
+                onmouseleave="this.style.color='#bfdbfe';this.style.background='none'">⚖</button>
+              ${_reconLight(a.id)}
+            </span>
+          </td>
+        </tr>`);
+      });
+    }
+
+    ch.forEach(c=>addNode(c,node.id));
+  }
+
+  function isAncestorCollapsed(pid) {
+    let cur=pid;
+    while(cur) {
+      if(rptCollapsed.has(cur)) return true;
+      const p=struct.find(n=>n.id===cur);
+      cur=p?.parentId||'';
+    }
+    return false;
+  }
+
+  struct.filter(n=>!n.parentId).forEach(n=>addNode(n,null));
+
+  // Conti non mappati con saldo
+  const unm=S.coa.filter(a=>{
+    const m2=S.mapping[a.id]; if(!m2) return true;
+    const kD2=mapKey==='civ'?'civD':'corpD', kC2=mapKey==='civ'?'civC':'corpC';
+    return !resolveNode(struct,m2[kD2])&&!resolveNode(struct,m2[kC2]);
+  });
+  const unmBal=unm.filter(a=>cols.some(c=>colBalance(c,a.id)!==0));
+  if(unmBal.length){
+    const tots=cols.map(c=>unmBal.reduce((s,a)=>s+colBalance(c,a.id),0));
+    const uc=rptCollapsed.has('__um__');
+    rows.push(`<tr class="r-sec" data-nid="__um__" data-par="" onclick="toggleCollapse('__um__')" style="cursor:pointer;background:#fef2f2">
+      <td colspan="2" style="padding:4px 8px;color:#991b1b">
+        <span style="display:inline-flex;align-items:center;gap:4px">
+          <span data-tog="__um__" style="font-size:9px;width:12px">${uc?'▶':'▼'}</span>
+          <span style="font-size:11px;font-weight:600">⚠ Non mappati (${unmBal.length})</span>
+        </span>
+      </td>
+      ${tots.map(v=>`<td class="neg" style="font-family:monospace;font-weight:700">${fmt(v)}</td>`).join('')}
+    </tr>`);
+    unmBal.forEach(a=>{
+      const aBals=cols.map(c=>colBalance(c,a.id));
+      rows.push(`<tr class="r-acc${uc?' r-hidden':''}" data-acc="1" data-par="__um__" style="background:#fff5f5">
+        <td style="padding-left:20px;font-family:monospace;font-size:9px;color:#dc2626">${esc(a.id)}</td>
+        <td style="font-size:10px;color:#991b1b">${esc(a.name)}</td>
+        ${aBals.map(v=>`<td class="neg" style="font-family:monospace;font-size:10px">${v!==0?fmt(v):'—'}</td>`).join('')}
+      </tr>`);
+    });
+  }
+
+  // Utile ante imposte (esclude nodo 63) e Utile netto
+  function calcUtile(bil, excludeNode63) {
+    // Usa sempre struttura Civile: E + D
+    const civStruct = S.civile;
+    const civKey = 'civ';
+    const nE = civStruct.find(n=>n.id==='E'||n.id.startsWith('E ')||n.id.startsWith('E-')||n.name.toLowerCase().startsWith('ricavi'));
+    const nD = civStruct.find(n=>n.id==='D'||n.id.startsWith('D ')||n.id.startsWith('D-')||n.name.toLowerCase().startsWith('costi'));
+    if (!nE && !nD) return 0;
+    const totE = nE ? nodeTotal(civStruct,S.mapping,civKey,bil,nE.id,rptMode) : 0;
+    const totD = nD ? nodeTotal(civStruct,S.mapping,civKey,bil,nD.id,rptMode) : 0;
+    const utileNetto = totE + totD;
+    if (!excludeNode63) return utileNetto;
+    // Ante imposte: sottrai nodo 63
+    const n63 = civStruct.find(n=>n.id==='63'||n.id.startsWith('63 ')||n.id.startsWith('63-'));
+    const tot63 = n63 ? nodeTotal(civStruct,S.mapping,civKey,bil,n63.id,rptMode) : 0;
+    return utileNetto - tot63;
+  }
+  // calcUtile per colonna (quarter o mese)
+  function calcUtileCol(col, excludeNode63) {
+    const kD=mapKey==='civ'?'civD':'corpD', kC=mapKey==='civ'?'civC':'corpC';
+    const n63=struct.find(n=>n.id==='63'||n.id.startsWith('63 ')||n.id.startsWith('63-'));
+    const ex63=n63?new Set([n63.id,...descendants(struct,n63.id)]):new Set();
+    return S.coa.reduce((s,a)=>{
+      const m2=S.mapping[a.id]; if(!m2) return s;
+      const refBil=col.isQ&&rptMode==='ytd'?col.bils[col.bils.length-1]:col.bils[0];
+      const ytd=getBalanceYTD(refBil,a.id);
+      const raw=ytd>=0?(m2[kD]||m2[kC]):(m2[kC]||m2[kD]);
+      const target=resolveNode(struct,raw); if(!target) return s;
+      if(excludeNode63&&ex63.has(target)) return s;
+      return s+colBalance(col,a.id);
+    },0);
+  }
+  const utiAI  = cols.map(c=>calcUtileCol(c,true));
+  const utiNet = cols.map(c=>calcUtileCol(c,false));
+  if(utiAI.some(v=>v!==0)||utiNet.some(v=>v!==0)){
+    rows.push(`<tr class="r-utile-ai">
+      <td colspan="2" style="padding-left:14px">
+        <span style="opacity:.4;font-size:9px;margin-right:8px;font-family:monospace;letter-spacing:.06em;font-style:normal">=</span>
+        Utile ante imposte
+      </td>
+      ${utiAI.map(v=>`<td class="${cn(v)}" style="font-family:monospace;font-size:14px;font-weight:700;font-style:normal">${fmt(v)}</td>`).join('')}
+    </tr>`);
+    rows.push(`<tr class="r-utile-netto">
+      <td colspan="2" style="padding-left:14px">
+        <span style="opacity:.4;font-size:9px;margin-right:8px;font-family:monospace;letter-spacing:.06em">=</span>
+        Utile netto
+      </td>
+      ${utiNet.map(v=>`<td class="${cn(v)}" style="font-family:monospace;font-size:16px;font-weight:800">${fmt(v)}</td>`).join('')}
+      <td></td>
+    </tr>`);
+  }
+
+  tbl.innerHTML=thead+`<tbody>${rows.join('')}</tbody>`;
+  requestAnimationFrame(()=>{if(_scr){_scr.scrollTop=_scrollTop;_scr.scrollLeft=_scrollLeft;}});
+  rRptKPI(struct,mapKey,selBils);
+}
+
+// KPI: Magazzino, Cassa netta (senza 1603), Fatturato (solo 4001), Marketing (5202)
+function rRptKPI(struct, mapKey, selBils) {
+  // KPI spostati in Dashboard
+  return;
+
+  function fn(...hints) { // findNode
+    for(const h of hints){
+      const lo=h.toLowerCase();
+      let n=struct.find(n=>n.id.toLowerCase()===lo||n.id.toLowerCase().startsWith(lo+' -')||n.id.toLowerCase().startsWith(lo+' '));
+      if(n) return n;
+      n=struct.find(n=>n.id.toLowerCase().includes(lo)||n.name.toLowerCase().includes(lo));
+      if(n) return n;
+    }
+    return null;
+  }
+
+  function cassaTot(b) {
+    const nd=fn("16 - disponibilit","disponibilit"); if(!nd) return null;
+    const ex=fn('1603'); const exIds=ex?new Set([ex.id,...descendants(struct,ex.id)]):new Set();
+    const scope=new Set([nd.id,...descendants(struct,nd.id)].filter(x=>!exIds.has(x)));
+    const kD3=mapKey==='civ'?'civD':'corpD', kC3=mapKey==='civ'?'civC':'corpC';
+    return S.coa.reduce((s,a)=>{
+      const bal=getBalance(b,a.id,rptMode);
+      const raw=bal>=0?(S.mapping[a.id]?.[kD3]||S.mapping[a.id]?.[kC3]):(S.mapping[a.id]?.[kC3]||S.mapping[a.id]?.[kD3]);
+      const t=resolveNode(struct,raw);
+      return (t&&scope.has(t))?s+bal:s;
+    },0);
+  }
+
+  const defs=[
+    {ic:'🏭',label:'Magazzino',   f:(b)=>{ const n=fn('1201','magazzino'); return n?nodeTotal(struct,S.mapping,mapKey,b,n.id,rptMode):null; }},
+    {ic:'💵',label:'Cassa netta', f:cassaTot, note:'escluso nodo 1603'},
+    {ic:'📈',label:'Fatturato',   f:(b)=>{ const n=fn('4001'); return n?nodeTotal(struct,S.mapping,mapKey,b,n.id,rptMode):null; }, note:'nodo 4001'},
+    {ic:'📣',label:'Marketing',   f:(b)=>{ const n=fn('5202'); return n?nodeTotal(struct,S.mapping,mapKey,b,n.id,rptMode):null; }, note:'nodo 5202'},
+  ];
+
+  const kpis=defs.map(d=>{
+    const vals=selBils.map(b=>d.f(b));
+    if(vals.every(v=>v===null)) return null;
+    return {...d, vals:vals.map(v=>v??0)};
+  }).filter(Boolean);
+
+  if(!kpis.length){el.innerHTML='';return;}
+
+  el.innerHTML=`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px">
+    ${kpis.map(k=>`<div style="flex:1;min-width:130px;background:#fff;border:1px solid #e7e5e4;border-radius:9px;padding:8px 11px">
+      <p style="font-size:11px;font-weight:600">${k.ic} ${k.label}${k.note?` <span style="font-size:9px;color:#a8a29e;font-weight:400">${esc(k.note)}</span>`:''}</p>
+      ${k.vals.map((v,i)=>`<div style="display:flex;justify-content:space-between;font-size:11px;margin-top:3px">
+        <span style="color:#78716c;font-size:10px">${esc(selBils[i].period)}</span>
+        <span class="${cn(v)}" style="font-family:monospace;font-weight:700">${fmt(v)}</span>
+      </div>`).join('')}
+    </div>`).join('')}
+  </div>`;
+}
+
+function expRptCSV() {
+  const struct=rptType==='civ'?S.civile:S.corporate;
+  const mapKey=rptType==='civ'?'civ':'corp';
+  const selBils=S.bilanci.filter(b=>rptPeriods.includes(b.period));
+  const rows=[['Tipo','Nodo ID','Nodo Nome','Conto ID','Conto Nome','Periodo','Saldo'].join(';')];
+  selBils.forEach(b=>{
+    S.coa.forEach(a=>{
+      const m2=S.mapping[a.id]; if(!m2) return;
+      const kD2=mapKey==='civ'?'civD':'corpD', kC2=mapKey==='civ'?'civC':'corpC';
+      const bal=getBalance(b,a.id,rptMode);
+      const raw=bal>=0?(m2[kD2]||m2[kC2]):(m2[kC2]||m2[kD2]); if(!raw) return;
+      const resolved=resolveNode(struct,raw); if(!resolved) return;
+      const node=struct.find(n=>n.id===resolved); if(!node) return;
+      const v=getBalance(b,a.id,rptMode);
+      if(v!==0) rows.push([rptType,node.id,node.name,a.id,a.name,b.period,v].map(x=>'"'+String(x||'').replace(/"/g,'""')+'"').join(';'));
+    });
+  });
+  const a=document.createElement('a');
+  a.href='data:text/csv;charset=utf-8,\uFEFF'+encodeURIComponent(rows.join('\n'));
+  a.download=`report_${rptType}_${rptMode}_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+}
+
+
+// RICONCILIAZIONE
+let reconNodeId=null
+function rRecon(){
+  const el=document.getElementById('pg-recon');if(!el)return;
+  const allP=S.bilanci.map(b=>b.period);
+  reconPeriod=allP.length?allP[allP.length-1]:null; // sempre ultimo periodo
+  const bil=S.bilanci.find(b=>b.period===reconPeriod);
+
+  // Conti con saldo non zero nel periodo corrente (più il conto già selezionato)
+  const contiAttivi=S.coa.filter(a=>{
+    if(!bil) return false;
+    return getBalance(bil,a.id,rptMode)!==0 || a.id===reconNodeId;
+  });
+  if(!reconNodeId && contiAttivi.length) reconNodeId=contiAttivi[0].id;
+
+  const saldo=bil&&reconNodeId ? getBalanceYTD(bil,reconNodeId) : 0;
+  const key=(reconNodeId||'')+'::'+reconPeriod;
+  if(!S.recon[key]) S.recon[key]=[];
+  const voci=S.recon[key];
+  const tot=voci.reduce((s,v)=>s+(v.segno==='+'?1:-1)*N(v.importo),0);
+  const sc=saldo-tot;
+  const inQ=Math.abs(sc)<0.005;
+
+  function vRow(v,i){
+    const k2=esc(key);
+    const colSgn=v.segno==='+'?'#15803d':'#dc2626';
+    return `<tr style="border-bottom:1px solid #f1f5f9">
+      <td style="padding:5px 10px;color:#94a3b8;font-size:11px">${i+1}</td>
+      <td style="padding:5px 10px"><input type="text" value="${esc(v.desc||'')}" placeholder="Descrizione…"
+        oninput="S.recon['${k2}'][${i}].desc=this.value;save()"
+        style="width:100%;border:1px solid #e2e8f0;border-radius:5px;padding:4px 8px;font-size:12px;outline:none"
+        onfocus="this.style.borderColor='#3b82f6'" onblur="this.style.borderColor='#e2e8f0'"></td>
+      <td style="padding:5px 10px;text-align:center">
+        <select onchange="S.recon['${k2}'][${i}].segno=this.value;rRecon()"
+          style="border:1px solid #e2e8f0;border-radius:5px;padding:3px 6px;font-size:13px;font-weight:700;color:${colSgn}">
+          <option value="+"${v.segno==='+'?' selected':''}>+</option>
+          <option value="-"${v.segno==='-'?' selected':''}>−</option>
+        </select></td>
+      <td style="padding:5px 10px"><input type="number" value="${v.importo||''}" step="0.01" placeholder="0,00"
+        oninput="S.recon['${k2}'][${i}].importo=parseFloat(this.value)||0;save();reconRefresh()"
+        style="width:100%;border:1px solid #e2e8f0;border-radius:5px;padding:4px 8px;font-size:13px;text-align:right;outline:none;font-family:monospace"
+        onfocus="this.style.borderColor='#3b82f6'" onblur="this.style.borderColor='#e2e8f0'"></td>
+      <td style="padding:5px 8px;text-align:center"><button onclick="delReconVoce(${i})"
+        style="background:none;border:none;cursor:pointer;color:#d6d3d1;font-size:14px;padding:2px 4px;border-radius:4px"
+        onmouseenter="this.style.color='#dc2626'" onmouseleave="this.style.color='#d6d3d1'">✕</button></td>
+    </tr>`;
+  }
+
+  const bodyHTML = voci.length===0
+    ? `<tr><td colspan="5" style="padding:28px;text-align:center;color:#a8a29e">Nessuna voce — clicca "+ Aggiungi voce".</td></tr>`
+    : voci.map(vRow).join('');
+
+  const footHTML = voci.length>0 ? `
+    <tfoot>
+      <tr style="background:#f8fafc;border-top:2px solid #e2e8f0">
+        <td colspan="3" style="padding:8px 10px;font-size:12px;font-weight:600;color:#334155">Totale voci</td>
+        <td id="recon-tot" class="${cn(tot)}" style="padding:8px 10px;text-align:right;font-family:monospace;font-weight:700;font-size:15px">${fmt(tot)}</td>
+        <td></td></tr>
+      <tr style="background:${inQ?'#f0fdf4':'#fef2f2'}">
+        <td colspan="3" style="padding:8px 10px;font-size:13px;font-weight:700;color:${inQ?'#15803d':'#dc2626'}">${inQ?'✓ In quadratura':'⚠ Scarto'}</td>
+        <td id="recon-scarto" style="padding:8px 10px;text-align:right;font-family:monospace;font-weight:800;font-size:16px;color:${inQ?'#15803d':'#dc2626'}">${inQ?'0,00':fmt(sc)}</td>
+        <td></td></tr>
+    </tfoot>` : '';
+
+  const contiOpts = contiAttivi.map(a=>{
+    const b2 = bil ? getBalance(bil,a.id,rptMode) : 0;
+    return `<option value="${esc(a.id)}"${a.id===reconNodeId?' selected':''}>${esc(a.id)} — ${esc(a.name)} (${fmt(b2)})</option>`;
+  }).join('');
+  const periodOpts = allP.map(p=>
+    `<option value="${esc(p)}"${p===reconPeriod?' selected':''}>${esc(p)}</option>`
+  ).join('');
+  const notaHtml = S.notes[reconNodeId]
+    ? `<div style="margin-top:12px;padding:10px 14px;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;font-size:12px;color:#92400e">📝 <strong>Nota dal report:</strong> ${esc(S.notes[reconNodeId]||'')}</div>` : '';
+
+  el.innerHTML = `<div style="max-width:900px">
+    <div class="row" style="margin-bottom:18px">
+      <div><p class="h1">⚖ Riconciliazione</p>
+           <p class="sub">Quadratura del saldo di un conto analitico con voci di dettaglio</p></div>
+      <div style="display:flex;gap:6px">
+        <button class="btn btn-sm" style="background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe" onclick="printRecon(false)" title="Stampa questa riconciliazione">🖨 Stampa</button>
+        <button class="btn btn-sm" style="background:#f0fdf4;color:#166534;border:1px solid #bbf7d0" onclick="printRecon(true)" title="Stampa tutte le riconciliazioni">🖨 Stampa tutto</button>
+        <button class="btn btn-sm btn-off" onclick="goTo('report')">← Report</button>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">
+      <div>
+        <label style="font-size:11px;font-weight:600;color:#64748b;display:block;margin-bottom:4px">Conto analitico</label>
+        <select style="width:100%;font-size:12px" onchange="reconNodeId=this.value;rRecon()">${contiOpts}</select>
+      </div>
+      <div>
+        <label style="font-size:11px;font-weight:600;color:#64748b;display:block;margin-bottom:4px">Periodo</label>
+        <div style="font-size:13px;font-weight:600;font-family:monospace;color:#1e40af;padding:6px 8px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:7px">${esc(reconPeriod||'—')}</div>
+        <span style="font-size:10px;color:#94a3b8">Saldo YTD ultimo periodo</span>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:20px">
+      <div class="card" style="padding:14px;text-align:center">
+        <p style="font-size:11px;color:#64748b;margin-bottom:6px">Saldo conto (${esc(rptMode.toUpperCase())})</p>
+        <p style="font-size:24px;font-weight:800;font-family:monospace" class="${cn(saldo)}">${fmt(saldo)}</p>
+      </div>
+      <div class="card" style="padding:14px;text-align:center">
+        <p style="font-size:11px;color:#64748b;margin-bottom:6px">Totale voci</p>
+        <p style="font-size:24px;font-weight:800;font-family:monospace" class="${cn(tot)}">${voci.length?fmt(tot):'—'}</p>
+      </div>
+      <div class="card" style="padding:14px;text-align:center;background:${inQ?'#f0fdf4':'#fef2f2'};border-color:${inQ?'#bbf7d0':'#fecaca'}">
+        <p style="font-size:11px;color:#64748b;margin-bottom:6px">Scarto</p>
+        <p style="font-size:24px;font-weight:800;font-family:monospace;color:${inQ?'#15803d':'#dc2626'}">${voci.length?(inQ?'✓ 0,00':fmt(sc)):'—'}</p>
+      </div>
+    </div>
+    <div class="card" style="padding:0;overflow:hidden">
+      <div class="card-hd" style="justify-content:space-between">
+        <span>Voci di riconciliazione</span>
+        <div style="display:flex;gap:5px">
+          <button class="btn btn-sm" style="background:#f0fdf4;color:#166534;border:1px solid #bbf7d0" onclick="copyReconVoci()" title="Copia voci negli appunti">📋 Copia</button>
+          <label class="btn btn-sm" style="background:#eff6ff;color:#1e40af;border:1px solid #bfdbfe;cursor:pointer" title="Importa voci da Excel/CSV">⬆ Importa<input type="file" accept=".xlsx,.csv" class="hidden" onchange="importReconVoci(this)"></label>
+          <button class="btn btn-sm" style="background:#fefce8;color:#854d0e;border:1px solid #fde68a" onclick="pasteReconVoci()" title="Incolla da Excel (Ctrl+V)">📌 Incolla</button>
+          <button class="btn btn-sm btn-on" onclick="addReconVoce()">+ Aggiungi</button>
+        </div>
+      </div>
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead><tr style="background:#f8fafc">
+          <th style="padding:7px 10px;text-align:left;font-size:10px;font-weight:600;color:#64748b;border-bottom:1px solid #e2e8f0;width:30px">#</th>
+          <th style="padding:7px 10px;text-align:left;font-size:10px;font-weight:600;color:#64748b;border-bottom:1px solid #e2e8f0">Descrizione</th>
+          <th style="padding:7px 10px;text-align:center;font-size:10px;font-weight:600;color:#64748b;border-bottom:1px solid #e2e8f0;width:55px">+/−</th>
+          <th style="padding:7px 10px;text-align:right;font-size:10px;font-weight:600;color:#64748b;border-bottom:1px solid #e2e8f0;width:160px">Importo</th>
+          <th style="width:32px;border-bottom:1px solid #e2e8f0"></th>
+        </tr></thead>
+        <tbody>${bodyHTML}</tbody>${footHTML}
+      </table>
+    </div>
+    <div id="msg-recon" style="margin-top:8px"></div>
+    ${notaHtml}
+    <div class="card" style="margin-top:16px">
+      <div class="card-hd" style="justify-content:space-between">
+        <span>📎 Allegati PDF</span>
+        <label class="btn btn-sm" style="background:#fef3c7;color:#92400e;border:1px solid #fde68a;cursor:pointer">
+          ⬆ Allega PDF
+          <input type="file" accept="application/pdf" multiple class="hidden" onchange="uploadReconPDF(this)">
+        </label>
+      </div>
+      <div id="recon-attachments" style="padding:8px 12px;min-height:36px">
+        <p style="color:#a8a29e;font-size:12px;text-align:center;padding:8px 0">Caricamento allegati...</p>
+      </div>
+      <div id="msg-attach" style="margin:0 12px 8px"></div>
+    </div>
+  </div>`;
+}
+
+// ── ALLEGATI PDF ────────────────────────────────────────────
+function _reconAttachKey() {
+  return ((reconNodeId||'')+'::'+reconPeriod).replace(/[^a-zA-Z0-9_-]/g,'_');
+}
+
+async function loadReconAttachments() {
+  const el = document.getElementById('recon-attachments');
+  if (!el) return;
+  if (!window._fbGetAttachments) {
+    el.innerHTML = '<p style="color:#a8a29e;font-size:12px;text-align:center;padding:8px 0">Firebase non disponibile.</p>';
+    return;
+  }
+  const files = await window._fbGetAttachments(_reconAttachKey());
+  renderAttachments(files);
+}
+
+function renderAttachments(files) {
+  const el = document.getElementById('recon-attachments');
+  if (!el) return;
+  if (!files || !files.length) {
+    el.innerHTML = '<p style="color:#a8a29e;font-size:12px;text-align:center;padding:8px 0">Nessun allegato.</p>';
+    return;
+  }
+  el.innerHTML = files.map((f,i) => `
+    <div style="display:flex;align-items:center;gap:8px;padding:6px 4px;border-bottom:1px solid #f1f5f9">
+      <span style="font-size:18px;flex-shrink:0">📄</span>
+      <span style="flex:1;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(f.name)}">${esc(f.name)}</span>
+      <span style="font-size:10px;color:#94a3b8;flex-shrink:0">${new Date(f.uploadedAt).toLocaleDateString('it-IT')}</span>
+      <a href="${esc(f.url)}" target="_blank" title="Apri PDF"
+         style="padding:3px 7px;border-radius:5px;background:#eff6ff;color:#1e40af;border:1px solid #bfdbfe;font-size:11px;text-decoration:none;flex-shrink:0">👁 Apri</a>
+      <a href="${esc(f.url)}" download="${esc(f.name)}" title="Scarica"
+         style="padding:3px 7px;border-radius:5px;background:#f0fdf4;color:#166534;border:1px solid #bbf7d0;font-size:11px;text-decoration:none;flex-shrink:0">⬇</a>
+      <button onclick="deleteReconPDF(${i})" title="Elimina"
+         style="padding:3px 7px;border-radius:5px;background:#fff;color:#dc2626;border:1px solid #fecaca;font-size:11px;cursor:pointer;flex-shrink:0">🗑</button>
+    </div>`).join('');
+}
+
+async function uploadReconPDF(inp) {
+  const files = Array.from(inp.files);
+  if (!files.length) return;
+  if (!window._fbUploadPDF) { showMsg('msg-attach','err','Firebase Storage non disponibile.'); return; }
+  const el = document.getElementById('recon-attachments');
+  showMsg('msg-attach','ok','⏳ Caricamento in corso...');
+  try {
+    const key = _reconAttachKey();
+    const existing = await window._fbGetAttachments(key);
+    const uploaded = [];
+    for (const file of files) {
+      if (file.type !== 'application/pdf') { showMsg('msg-attach','err','Solo file PDF.'); continue; }
+      if (file.size > 10 * 1024 * 1024) { showMsg('msg-attach','err',file.name+' supera 10MB.'); continue; }
+      const meta = await window._fbUploadPDF(key, file);
+      uploaded.push(meta);
+    }
+    const allFiles = [...existing, ...uploaded];
+    await window._fbSaveAttachments(key, allFiles);
+    renderAttachments(allFiles);
+    showMsg('msg-attach','ok','✓ '+uploaded.length+' PDF allegati.');
+  } catch(e) { showMsg('msg-attach','err','Errore: '+e.message); }
+  inp.value = '';
+}
+
+async function deleteReconPDF(idx) {
+  if (!confirm('Eliminare questo allegato?')) return;
+  if (!window._fbDeletePDF) return;
+  try {
+    const key = _reconAttachKey();
+    const files = await window._fbGetAttachments(key);
+    const f = files[idx];
+    await window._fbDeletePDF(f.path);
+    files.splice(idx, 1);
+    await window._fbSaveAttachments(key, files);
+    renderAttachments(files);
+    showMsg('msg-attach','ok','✓ Allegato eliminato.');
+  } catch(e) { showMsg('msg-attach','err','Errore: '+e.message); }
+}
+
+// Listener paste globale: quando pg-recon è attivo, Ctrl+V incolla voci
+document.addEventListener('paste', function(e) {
+  if (page !== 'recon') return;
+  // Ignora se si sta incollando in un input/textarea
+  const tag = document.activeElement?.tagName;
+  if (tag==='INPUT'||tag==='TEXTAREA') return;
+  const text = e.clipboardData?.getData('text');
+  if (!text) return;
+  e.preventDefault();
+  parseAndInsertPaste(text);
+});
+
+// Carica allegati dopo che la pagina recon è renderizzata
+const _origRRecon = rRecon;
+function rRecon() {
+  _origRRecon();
+  setTimeout(loadReconAttachments, 100);
+}
+
+let reconPeriod=null;
+function goRecon(nId){reconNodeId=nId;reconPeriod=rptPeriods[rptPeriods.length-1]||(S.bilanci.length?S.bilanci[S.bilanci.length-1].period:null);page='recon';renderAll();}
+// Incolla voci dagli appunti (tab-separated da Excel)
+async function pasteReconVoci() {
+  try {
+    // Prova clipboard API (Chrome/Edge con HTTPS o localhost)
+    let text = '';
+    if (navigator.clipboard && navigator.clipboard.readText) {
+      try { text = await navigator.clipboard.readText(); }
+      catch(e) { text = ''; }
+    }
+    // Fallback: area di testo modale per incollare manualmente
+    if (!text) {
+      text = await pasteModal();
+      if (!text) return;
+    }
+    parseAndInsertPaste(text);
+  } catch(e) { showMsg('msg-recon','err','Errore incolla: '+e.message); }
+}
+
+// Modal per incollare manualmente (fallback se clipboard API non disponibile)
+function pasteModal() {
+  return new Promise(resolve => {
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:9999;display:flex;align-items:center;justify-content:center';
+    overlay.innerHTML = `
+      <div style="background:#fff;border-radius:14px;padding:24px;width:460px;max-width:90vw;box-shadow:0 20px 60px rgba(0,0,0,.2)">
+        <p style="font-weight:700;font-size:14px;margin-bottom:6px">📌 Incolla da Excel</p>
+        <p style="font-size:12px;color:#64748b;margin-bottom:12px">Copia le celle da Excel (colonne: Descrizione, Segno, Importo) poi incolla qui sotto con <b>Ctrl+V</b></p>
+        <textarea id="paste-area" style="width:100%;height:140px;border:1px solid #e2e8f0;border-radius:8px;padding:8px;font-size:12px;font-family:monospace;resize:vertical;outline:none" placeholder="Incolla qui..."></textarea>
+        <div style="display:flex;gap:8px;margin-top:12px;justify-content:flex-end">
+          <button onclick="this.closest('div').parentNode.parentNode._cancel()" style="padding:7px 16px;border:1px solid #e2e8f0;border-radius:7px;background:#fff;cursor:pointer;font-size:13px">Annulla</button>
+          <button onclick="this.closest('div').parentNode.parentNode._confirm()" style="padding:7px 16px;border-radius:7px;background:#1e40af;color:#fff;border:none;cursor:pointer;font-size:13px;font-weight:600">Importa</button>
+        </div>
+      </div>`;
+    overlay._cancel = () => { overlay.remove(); resolve(''); };
+    overlay._confirm = () => { const t = overlay.querySelector('#paste-area').value; overlay.remove(); resolve(t); };
+    document.body.appendChild(overlay);
+    setTimeout(() => overlay.querySelector('#paste-area').focus(), 50);
+  });
+}
+
+// Parsa testo tab-separated e inserisce le voci
+function parseAndInsertPaste(text) {
+  const lines = text.replace(/\r\n/g,'\n').replace(/\r/g,'\n').split('\n').filter(l=>l.trim());
+  if (!lines.length) { showMsg('msg-recon','err','Nessun dato da incollare.'); return; }
+  // Rileva se prima riga è header (contiene "desc" o "import" o "segno")
+  const first = lines[0].toLowerCase();
+  const si = (first.includes('desc')||first.includes('import')||first.includes('segno')||first.includes('note')) ? 1 : 0;
+  // Determina separatore (tab o ;)
+  const sep = lines[0].includes('\t') ? '\t' : ';';
+  const newVoci = [];
+  for (let i=si; i<lines.length; i++) {
+    const cols = lines[i].split(sep);
+    if (!cols.length) continue;
+    // Formato: Descrizione [Segno] [Importo]
+    // Supporta anche solo 2 colonne: Descrizione | Importo (segno dal segno del numero)
+    let desc='', segno='+', importo=0;
+    if (cols.length >= 3) {
+      desc = cols[0].trim().replace(/^"|"$/g,'');
+      const sRaw = cols[1].trim().replace(/^"|"$/g,'');
+      segno = (sRaw==='-'||sRaw.toLowerCase()==='dare') ? '-' : '+';
+      const aRaw = cols[2].trim().replace(/^"|"$/g,'').replace(/[.\s]/g,'').replace(',','.');
+      importo = Math.abs(parseFloat(aRaw)||0);
+    } else if (cols.length === 2) {
+      desc = cols[0].trim().replace(/^"|"$/g,'');
+      const aRaw = cols[1].trim().replace(/^"|"$/g,'').replace(/[.\s]/g,'').replace(',','.');
+      const val = parseFloat(aRaw)||0;
+      segno = val < 0 ? '-' : '+';
+      importo = Math.abs(val);
+    } else if (cols.length === 1) {
+      const aRaw = cols[0].trim().replace(/^"|"$/g,'').replace(/[.\s]/g,'').replace(',','.');
+      const val = parseFloat(aRaw)||0;
+      if (!val) continue;
+      segno = val < 0 ? '-' : '+';
+      importo = Math.abs(val);
+    }
+    if (importo === 0 && !desc) continue;
+    newVoci.push({desc, segno, importo});
+  }
+  if (!newVoci.length) { showMsg('msg-recon','err','Nessuna voce riconosciuta. Verifica il formato: Descrizione\tSegno\tImporto'); return; }
+  const key = (reconNodeId||'')+'::'+reconPeriod;
+  if (!S.recon[key]) S.recon[key] = [];
+  const before = S.recon[key].length;
+  S.recon[key].push(...newVoci);
+  save(); rRecon();
+  showMsg('msg-recon','ok','✓ '+newVoci.length+' voci incollate'+(before?' (aggiunte a '+before+' esistenti)':'')+'. Totale: '+S.recon[key].length+'.');
+}
+
+// Copia voci negli appunti (formato tab-separated per Excel)
+function copyReconVoci() {
+  const key = (reconNodeId||'') + '::' + reconPeriod;
+  const voci = S.recon[key] || [];
+  if (!voci.length) { showMsg('msg-recon','err','Nessuna voce da copiare.'); return; }
+  const lines = ['Descrizione	Segno	Importo'];
+  voci.forEach(v => {
+    lines.push([
+      (v.desc||'').replace(/	/g,' '),
+      v.segno||'+',
+      String(v.importo||0).replace('.',',')
+    ].join('	'));
+  });
+  // Aggiungi riga totale
+  const tot = voci.reduce((s,v)=>s+(v.segno==='+'?1:-1)*(v.importo||0), 0);
+  lines.push(['TOTALE','',String(tot.toFixed(2)).replace('.',',')].join('	'));
+  navigator.clipboard.writeText(lines.join('\n'))
+    .then(()=>showMsg('msg-recon','ok','✓ '+voci.length+' voci copiate negli appunti.'))
+    .catch(()=>showMsg('msg-recon','err','Errore copia appunti.'));
+}
+
+// Importa voci da Excel/CSV
+async function importReconVoci(inp) {
+  const f = inp.files[0]; if (!f) return;
+  try {
+    let rows;
+    if (f.name.toLowerCase().endsWith('.csv')) {
+      rows = parseCSV(await f.text());
+    } else {
+      const wb = await XLSX.read(await f.arrayBuffer());
+      rows = wb.Sheets[wb.SheetNames[0]];
+    }
+    if (!rows || !rows.length) { showMsg('msg-recon','err','File vuoto.'); return; }
+    // Rileva header: desc/descrizione, segno, importo/amount
+    const hdr = rows[0].map(c=>String(c||'').toLowerCase().trim());
+    const iDesc = hdr.findIndex(c=>c.includes('desc')||c.includes('note')||c.includes('voce')); 
+    const iSign = hdr.findIndex(c=>c.includes('segno')||c.includes('sign')||c==='+-'||c==='+/-');
+    const iAmt  = hdr.findIndex(c=>c.includes('import')||c.includes('amount')||c.includes('valore'));
+    const si = (iDesc>=0||iSign>=0||iAmt>=0) ? 1 : 0; // salta header se trovata
+    const dI = iDesc>=0?iDesc:0, sI = iSign>=0?iSign:1, aI = iAmt>=0?iAmt:(si?2:1);
+    const newVoci = [];
+    for (let i=si; i<rows.length; i++) {
+      const r = rows[i]; if (!r || !r[aI]) continue;
+      const raw = String(r[aI]||'').replace(/[^\d.,-]/g,'').replace(',','.');
+      const amt = parseFloat(raw);
+      if (isNaN(amt)) continue;
+      const desc = String(r[dI]||'').trim();
+      const sRaw = String(r[sI]||'').trim();
+      const segno = sRaw==='-'||sRaw.toLowerCase()==='dare'||amt<0 ? '-' : '+';
+      newVoci.push({ desc, segno, importo: Math.abs(amt) });
+    }
+    if (!newVoci.length) { showMsg('msg-recon','err','Nessuna voce trovata nel file.'); inp.value=''; return; }
+    const key = (reconNodeId||'') + '::' + reconPeriod;
+    if (S.recon[key]?.length) {
+      if (!confirm('Sostituire le '+S.recon[key].length+' voci esistenti con '+newVoci.length+' nuove?')) { inp.value=''; return; }
+    }
+    if (!S.recon[key]) S.recon[key] = [];
+    S.recon[key].splice(0, S.recon[key].length, ...newVoci);
+    save(); rRecon();
+    showMsg('msg-recon','ok','✓ '+newVoci.length+' voci importate.');
+  } catch(e) { showMsg('msg-recon','err','Errore: '+e.message); }
+  inp.value='';
+}
+
+function addReconVoce(){const k=(reconNodeId||'')+'::'+reconPeriod;if(!S.recon[k])S.recon[k]=[];S.recon[k].push({desc:'',segno:'+',importo:0});save();rRecon();}
+function delReconVoce(i){const k=(reconNodeId||'')+'::'+reconPeriod;if(S.recon[k])S.recon[k].splice(i,1);save();rRecon();}
+function reconRefresh(){const k=(reconNodeId||'')+'::'+reconPeriod;const voci=S.recon[k]||[];const st=rptType==='civ'?S.civile:S.corporate;const mk=rptType==='civ'?'civ':'corp';const b=S.bilanci.find(x=>x.period===reconPeriod);const sd=b&&reconNodeId?getBalance(b,reconNodeId,rptMode):0;const tot=voci.reduce((s,v)=>s+(v.segno==='+'?1:-1)*N(v.importo),0);const sc=sd-tot;const q=Math.abs(sc)<0.005;const e1=document.getElementById('recon-tot'),e2=document.getElementById('recon-scarto');if(e1){e1.textContent=fmt(tot);e1.className=cn(tot);}if(e2){e2.textContent=q?'0,00':fmt(sc);e2.style.color=q?'#15803d':'#dc2626';}}
+// ══════════════════════════════════════════════════════════
+// STAMPA
+// ══════════════════════════════════════════════════════════
+function printBilancio() {
+  // Aggiorna subtitle con periodo/tipo prima di stampare
+  const el = document.getElementById('print-subtitle');
+  if (el) el.textContent = 'Bilancio riclassificato ' + (rptType==='civ'?'Civile':'Corporate') + ' — ' + rptMode.toUpperCase();
+  window.print();
+}
+
+function printRecon(all) {
+  const company = 'Serom Medical Technology s.r.l.';
+  if (!all) {
+    // Stampa riconciliazione corrente
+    const conto = S.coa.find(a=>a.id===reconNodeId);
+    const bil = S.bilanci.find(b=>b.period===reconPeriod);
+    const key = (reconNodeId||'')+'::'+reconPeriod;
+    const voci = S.recon[key]||[];
+    const saldo = bil&&reconNodeId ? getBalanceYTD(bil,reconNodeId) : 0;
+    const tot = voci.reduce((s,v)=>s+(v.segno==='+'?1:-1)*N(v.importo),0);
+    const sc = saldo-tot;
+    const inQ = Math.abs(sc)<0.005;
+    const rows = voci.map((v,i)=>`<tr><td>${i+1}</td><td>${esc(v.desc||'')}</td><td style="text-align:center;color:${v.segno==='+'?'#15803d':'#dc2626'};font-weight:700">${v.segno}</td><td style="text-align:right;font-family:monospace">${fmt((v.segno==='+'?1:-1)*N(v.importo))}</td></tr>`).join('');
+    _printWindow(`<h1 style="font-size:15px;margin:0 0 4px 0">${company}</h1>
+      <p style="font-size:11px;color:#555;margin:0 0 10px 0">Riconciliazione — ${esc(reconNodeId)} ${esc(conto?.name||'')} — Periodo ${esc(reconPeriod)}</p>
+      <table border="1" cellpadding="5" cellspacing="0" style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead><tr style="background:#dbeafe"><th>#</th><th>Descrizione</th><th>+/−</th><th>Importo</th></tr></thead>
+        <tbody>${rows}</tbody>
+        <tfoot>
+          <tr><td colspan="3" style="font-weight:700">Totale voci</td><td style="text-align:right;font-family:monospace;font-weight:700">${fmt(tot)}</td></tr>
+          <tr><td colspan="3" style="font-weight:700">Saldo conto (${rptMode.toUpperCase()})</td><td style="text-align:right;font-family:monospace;font-weight:700">${fmt(saldo)}</td></tr>
+          <tr style="background:${inQ?'#f0fdf4':'#fef2f2'}"><td colspan="3" style="font-weight:800;color:${inQ?'#15803d':'#dc2626'}">${inQ?'✓ In quadratura':'⚠ Scarto'}</td><td style="text-align:right;font-family:monospace;font-weight:800;color:${inQ?'#15803d':'#dc2626'}">${inQ?'0,00':fmt(sc)}</td></tr>
+        </tfoot>
+      </table>`);
+  } else {
+    // Stampa massiva: tutte le riconciliazioni con voci
+    const keys = Object.keys(S.recon).filter(k=>S.recon[k]&&S.recon[k].length>0);
+    if (!keys.length) { alert('Nessuna riconciliazione da stampare.'); return; }
+    const sections = keys.map(key=>{
+      const [nId, period] = key.split('::');
+      const conto = S.coa.find(a=>a.id===nId);
+      const bil = S.bilanci.find(b=>b.period===period);
+      const voci = S.recon[key]||[];
+      const saldo = bil&&nId ? getBalanceYTD(bil,nId) : 0;
+      const tot = voci.reduce((s,v)=>s+(v.segno==='+'?1:-1)*N(v.importo),0);
+      const sc = saldo-tot;
+      const inQ = Math.abs(sc)<0.005;
+      const rows = voci.map((v,i)=>`<tr><td>${i+1}</td><td>${esc(v.desc||'')}</td><td style="text-align:center;color:${v.segno==='+'?'#15803d':'#dc2626'};font-weight:700">${v.segno}</td><td style="text-align:right;font-family:monospace">${fmt((v.segno==='+'?1:-1)*N(v.importo))}</td></tr>`).join('');
+      return `<div style="page-break-inside:avoid;margin-bottom:28px">
+        <p style="font-weight:700;font-size:13px;margin:0 0 3px 0">${esc(nId)} — ${esc(conto?.name||'')} &nbsp; <span style="font-weight:400;color:#64748b">${esc(period)}</span></p>
+        <table border="1" cellpadding="4" cellspacing="0" style="width:100%;border-collapse:collapse;font-size:11px">
+          <thead><tr style="background:#dbeafe"><th>#</th><th>Descrizione</th><th>+/−</th><th>Importo</th></tr></thead>
+          <tbody>${rows}</tbody>
+          <tfoot>
+            <tr><td colspan="3" style="font-weight:700">Saldo ${rptMode.toUpperCase()}</td><td style="text-align:right;font-family:monospace;font-weight:700">${fmt(saldo)}</td></tr>
+            <tr style="background:${inQ?'#f0fdf4':'#fef2f2'}"><td colspan="3" style="font-weight:800;color:${inQ?'#15803d':'#dc2626'}">${inQ?'✓ In quadratura':'⚠ Scarto'}</td><td style="text-align:right;font-family:monospace;font-weight:800;color:${inQ?'#15803d':'#dc2626'}">${inQ?'0,00':fmt(sc)}</td></tr>
+          </tfoot>
+        </table></div>`;
+    }).join('');
+    _printWindow(`<h1 style="font-size:15px;margin:0 0 2px 0">${company}</h1>
+      <p style="font-size:11px;color:#555;margin:0 0 14px 0">Riconciliazioni — tutti i conti — ${new Date().toLocaleDateString('it-IT')}</p>
+      ${sections}`);
+  }
+}
+
+function _printWindow(bodyHtml) {
+  const w = window.open('','_blank','width=900,height=700');
+  if (!w) { alert('Popup bloccato — consenti popup per questa pagina.'); return; }
+  w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8">
+    <title>Stampa</title>
+    <style>
+      body{font-family:-apple-system,sans-serif;margin:20mm 15mm;color:#1c1917}
+      table{font-size:11px} th,td{padding:4px 8px;border:1px solid #ccc}
+      thead tr{background:#dbeafe} tfoot tr{font-weight:600}
+      @page{margin:15mm;size:A4}
+      @media print{body{margin:0}}
+    </style></head><body>${bodyHtml}</body></html>`);
+  w.document.close();
+  w.focus();
+  setTimeout(()=>w.print(), 400);
+}
+
+// ══════════════════════════════════════════════════════════
+// ESPORTA / IMPORTA STATO
+// ══════════════════════════════════════════════════════════
+function exportState() {
+  const json = JSON.stringify(S, null, 2);
+  const date = new Date().toISOString().slice(0,10);
+  const a = document.createElement('a');
+  a.href = 'data:application/json;charset=utf-8,' + encodeURIComponent(json);
+  a.download = 'sap-reclassifier-' + date + '.json';
+  a.click();
+}
+
+function importState(input) {
+  const file = input.files[0]; if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const parsed = JSON.parse(e.target.result);
+      // Valida che abbia almeno le chiavi base
+      if (typeof parsed !== 'object' || !parsed.coa) {
+        alert('File non valido: manca la struttura attesa.'); return;
+      }
+      // Merge con BLANK per chiavi mancanti (compatibilità versioni precedenti)
+      const merged = { ...BLANK, ...parsed };
+      Object.keys(BLANK).forEach(k => { if (!merged[k]) merged[k] = BLANK[k]; });
+      S = merged;
+      save();
+      renderAll();
+      alert('✓ Stato importato correttamente.');
+    } catch(ex) {
+      alert('Errore nel file JSON: ' + ex.message);
+    }
+    input.value = '';
+  };
+  reader.readAsText(file, 'utf-8');
+}
+
+// ══════════════════════════════════════════════════════════
+// INIT
+// ══════════════════════════════════════════════════════════
+// ── Auto-export alla chiusura ─────────────────────────────────────────────
+
+renderAll();
+
+// ── Banner ripristino: solo se dati assenti dopo caricamento localStorage ──
+(function checkRestore() {
+  if (S.coa.length || S.bilanci.length || S.civile.length) return; // dati già presenti
+  const b = document.createElement('div');
+  b.id = 'restore-banner';
+  b.style.cssText = [
+    'position:fixed;bottom:16px;right:16px;z-index:999',
+    'background:#1d4ed8;color:#fff',
+    'padding:10px 14px;border-radius:10px',
+    'display:flex;align-items:center;gap:10px',
+    'font-size:12px;box-shadow:0 4px 16px rgba(0,0,0,.25)',
+    'max-width:340px'
+  ].join(';');
+  b.innerHTML = `
+    <span>📂 Hai un backup <strong>.json</strong> da ripristinare?</span>
+    <label style="background:#fff;color:#1d4ed8;font-weight:700;padding:4px 10px;border-radius:5px;cursor:pointer;white-space:nowrap;font-size:11px">
+      Carica
+      <input type="file" accept=".json" style="display:none"
+        onchange="importState(this);document.getElementById('restore-banner').remove()">
+    </label>
+    <button onclick="document.getElementById('restore-banner').remove()"
+      style="background:none;border:none;color:rgba(255,255,255,.7);cursor:pointer;font-size:16px;padding:0;line-height:1">✕</button>`;
+  document.body.appendChild(b);
+})();
+</script>
+</body>
+</html>
