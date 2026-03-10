@@ -671,6 +671,87 @@ function evalFormula(formula, struct, mapping, mapKey, bil, mode) {
   return result;
 }
 
+// Calcola gli aggiustamenti di riclassificazione: lista di {nodeId, delta} da sommare ai totali nodo.
+// Per ogni regola attiva: sottrae il delta dal nodo origine, lo aggiunge al nodo destinazione.
+function calcRiclassAdj(struct, mapping, mapKey, bil, mode, riclass) {
+  const kD = mapKey==='civ'?'civD': mapKey==='corp'?'corpD':'civ6D';
+  const kC = mapKey==='civ'?'civC': mapKey==='corp'?'corpC':'civ6C';
+  const deltas = {}; // nodeId -> delta
+  function applyDelta(nodeId, delta) {
+    if (!nodeId) return;
+    // Risolvi il nodo e tutti i suoi antenati nella struttura
+    function ancestors(id) {
+      const result = [];
+      let cur = struct.find(n=>n.id===id);
+      while (cur) {
+        result.push(cur.id);
+        cur = struct.find(n=>n.id===cur.parent);
+      }
+      return result;
+    }
+    // Il delta va applicato al nodo stesso e risale agli antenati (come fa nodeTotal via scope/descendants)
+    // Usiamo un approccio diverso: teniamo solo il delta sul nodo foglia e lo propaghiamo in nodeTotal
+    deltas[nodeId] = (deltas[nodeId]||0) + delta;
+  }
+  for (const r of riclass) {
+    if (r.active === false) continue;
+    if (r.type === 'account') {
+      const a = S.coa.find(x=>x.id===r.source);
+      if (!a) continue;
+      // Calcola il saldo del conto sorgente
+      _currentRiclassAdj = null; // evita ricorsione
+      const bal = getBalance(bil, a.id, mode);
+      if (bal === 0) continue;
+      // Il delta da spostare
+      let delta;
+      if (r.amount != null && r.amount > 0) {
+        // Importo parziale: il segno segue il saldo
+        delta = Math.sign(bal) * Math.abs(r.amount);
+      } else {
+        delta = bal;
+      }
+      // Trova il nodo corrente del conto (dove è mappato nel presente mapKey)
+      const rawSrc = bal>=0 ? (mapping[a.id]?.[kD]||mapping[a.id]?.[kC]) : (mapping[a.id]?.[kC]||mapping[a.id]?.[kD]);
+      const srcNode = resolveNode(struct, rawSrc);
+      // Nodo destinazione riclassifica
+      const dstNode = resolveNode(struct, r.target);
+      if (!srcNode || !dstNode || srcNode === dstNode) continue;
+      applyDelta(srcNode, -delta);
+      applyDelta(dstNode, +delta);
+    } else if (r.type === 'node') {
+      // Riclassifica di ramo: sposta il totale del nodo sorgente → destinazione
+      _currentRiclassAdj = null;
+      const srcNode = resolveNode(struct, r.source);
+      const dstNode = resolveNode(struct, r.target);
+      if (!srcNode || !dstNode || srcNode === dstNode) continue;
+      const nodeTot = nodeTotal(struct, mapping, mapKey, bil, srcNode, mode);
+      if (nodeTot === 0) continue;
+      let delta;
+      if (r.amount != null && r.amount > 0) {
+        delta = Math.sign(nodeTot) * Math.abs(r.amount);
+      } else {
+        delta = nodeTot;
+      }
+      applyDelta(srcNode, -delta);
+      applyDelta(dstNode, +delta);
+    }
+  }
+  // Converti in lista e propaga agli antenati
+  const result = [];
+  for (const [nodeId, delta] of Object.entries(deltas)) {
+    if (delta === 0) continue;
+    // Propaga il delta al nodo stesso e a tutti gli antenati
+    let cur = struct.find(n=>n.id===nodeId);
+    const visited = new Set();
+    while (cur && !visited.has(cur.id)) {
+      visited.add(cur.id);
+      result.push({nodeId: cur.id, delta});
+      cur = struct.find(n=>n.id===cur.parent);
+    }
+  }
+  return result;
+}
+
 function nodeTotal(struct, mapping, mapKey, bil, nodeId, mode) {
   // Se il nodo ha una formula esplicita, usala (evita doppi conteggi)
   const nodeDef = struct.find(n=>n.id===nodeId);
@@ -679,13 +760,20 @@ function nodeTotal(struct, mapping, mapKey, bil, nodeId, mode) {
   const scope = new Set([nodeId,...descendants(struct,nodeId)]);
   const kD = mapKey==='civ'?'civD': mapKey==='corp'?'corpD':'civ6D';
   const kC = mapKey==='civ'?'civC': mapKey==='corp'?'corpC':'civ6C';
-  return S.coa.reduce((sum,a)=>{
+  let total = S.coa.reduce((sum,a)=>{
     const bal = getBalance(bil, a.id, mode);
     const rawTarget = bal>=0 ? (mapping[a.id]?.[kD]||mapping[a.id]?.[kC]) : (mapping[a.id]?.[kC]||mapping[a.id]?.[kD]);
     const target = resolveNode(struct, rawTarget);
     if (!target||!scope.has(target)) return sum;
     return sum + bal;
   }, 0);
+  // Applica aggiustamenti di riclassificazione (se attivi)
+  if (_currentRiclassAdj) {
+    for (const adj of _currentRiclassAdj) {
+      if (adj.nodeId === nodeId) total += adj.delta;
+    }
+  }
+  return total;
 }
 
 // ══════════════════════════════════════════════════════════
@@ -2043,15 +2131,19 @@ function rRptTable() {
   // colVal: valore di una colonna per un conto/nodo
   // YTD quarter = saldo dell'ultimo mese del quarter disponibile
   // PTD quarter = somma dei PTD mensili del quarter
+  const _riclass = rptView.includes('civ') ? (S.riclassCiv||[]) : (S.riclassIFRS||[]);
+  function _withAdj(bil, mode, fn) {
+    _currentRiclassAdj = calcRiclassAdj(struct, S.mapping, mapKey, bil, mode, _riclass);
+    const r = fn();
+    _currentRiclassAdj = null;
+    return r;
+  }
   function colNodeTotal(col, nodeId) {
     if(!col.isQ || rptMode==='ptd') {
-      // PTD: somma movimenti di tutti i mesi del quarter
-      // singolo mese: valore diretto
-      return col.bils.reduce((s,b)=>s+nodeTotal(struct,S.mapping,mapKey,b,nodeId,rptMode),0);
+      return col.bils.reduce((s,b)=>s+_withAdj(b,rptMode,()=>nodeTotal(struct,S.mapping,mapKey,b,nodeId,rptMode)),0);
     }
-    // YTD quarter: saldo dell'ultimo mese disponibile nel quarter
     const last=col.bils[col.bils.length-1];
-    return nodeTotal(struct,S.mapping,mapKey,last,nodeId,'ytd');
+    return _withAdj(last,'ytd',()=>nodeTotal(struct,S.mapping,mapKey,last,nodeId,'ytd'));
   }
   function colBalance(col, accountId) {
     if(!col.isQ || rptMode==='ptd') {
@@ -2362,6 +2454,7 @@ function _allPeriods() {
 // RICLASSIFICHE
 // ══════════════════════════════════════════════════════════
 let riclassLedger = 'ifrs'; // 'ifrs' | 'civ'
+let _currentRiclassAdj = null; // [{nodeId, delta}] set by rRptTable before nodeTotal calls
 
 function rRiclass() {
   const el = document.getElementById('pg-riclass'); if (!el) return;
@@ -2374,24 +2467,37 @@ function rRiclass() {
   function ruleRow(r, i) {
     const typeLabel = r.type==='account' ? '📋 Conto' : '🌿 Ramo';
     const activeStyle = r.active!==false ? 'background:#f0fdf4;border:1px solid #bbf7d0' : 'background:#fafaf9;border:1px solid #e7e5e4;opacity:.6';
-    return `<div style="${activeStyle};border-radius:10px;padding:10px 14px;margin-bottom:8px;display:grid;grid-template-columns:auto 1fr 1fr auto auto;gap:8px;align-items:center">
-      <span style="font-size:11px;background:${r.type==='account'?'#eff6ff':'#f0fdf4'};color:${r.type==='account'?'#1e40af':'#15803d'};border:1px solid ${r.type==='account'?'#bfdbfe':'#bbf7d0'};border-radius:5px;padding:2px 7px;white-space:nowrap">${typeLabel}</span>
-      <div>
-        <div style="font-size:10px;color:#64748b;margin-bottom:2px">Origine</div>
-        <div style="font-family:monospace;font-size:12px;font-weight:600">${esc(r.source||'—')}</div>
-        ${r.sourceName?`<div style="font-size:10px;color:#78716c">${esc(r.sourceName)}</div>`:''}
+    const amtLabel = (r.amount != null && r.amount > 0)
+      ? `<span style="font-size:10px;background:#fefce8;color:#854d0e;border:1px solid #fde68a;border-radius:4px;padding:1px 6px;margin-left:4px">✂ ${fmt(r.amount)}</span>`
+      : `<span style="font-size:10px;color:#a8a29e;margin-left:4px">intero saldo</span>`;
+    return `<div style="${activeStyle};border-radius:10px;padding:10px 14px;margin-bottom:8px">
+      <div style="display:grid;grid-template-columns:auto 1fr 1fr auto auto;gap:8px;align-items:start">
+        <span style="font-size:11px;background:${r.type==='account'?'#eff6ff':'#f0fdf4'};color:${r.type==='account'?'#1e40af':'#15803d'};border:1px solid ${r.type==='account'?'#bfdbfe':'#bbf7d0'};border-radius:5px;padding:2px 7px;white-space:nowrap;margin-top:2px">${typeLabel}</span>
+        <div>
+          <div style="font-size:10px;color:#64748b;margin-bottom:2px">Origine</div>
+          <div style="font-family:monospace;font-size:12px;font-weight:600">${esc(r.source||'—')}</div>
+          ${r.sourceName?`<div style="font-size:10px;color:#78716c">${esc(r.sourceName)}</div>`:''}
+        </div>
+        <div>
+          <div style="font-size:10px;color:#64748b;margin-bottom:2px">→ Destinazione</div>
+          <div style="font-family:monospace;font-size:12px;font-weight:600;color:#7e22ce">${esc(r.target||'—')}</div>
+          ${r.targetName?`<div style="font-size:10px;color:#78716c">${esc(r.targetName)}</div>`:''}
+        </div>
+        <button onclick="toggleRiclass('${ledger}',${i})" title="${r.active!==false?'Disattiva':'Attiva'}"
+          style="padding:3px 9px;border-radius:6px;font-size:11px;cursor:pointer;border:1px solid;${r.active!==false?'background:#f0fdf4;color:#15803d;border-color:#bbf7d0':'background:#fef2f2;color:#dc2626;border-color:#fecaca'}">
+          ${r.active!==false?'✓ Attiva':'✗ Off'}
+        </button>
+        <button onclick="delRiclass('${ledger}',${i})" style="padding:3px 7px;border-radius:6px;font-size:11px;cursor:pointer;background:#fff;color:#dc2626;border:1px solid #fecaca">🗑</button>
       </div>
-      <div>
-        <div style="font-size:10px;color:#64748b;margin-bottom:2px">→ Destinazione</div>
-        <div style="font-family:monospace;font-size:12px;font-weight:600;color:#7e22ce">${esc(r.target||'—')}</div>
-        ${r.targetName?`<div style="font-size:10px;color:#78716c">${esc(r.targetName)}</div>`:''}
-        ${r.note?`<div style="font-size:10px;color:#a8a29e;font-style:italic">${esc(r.note)}</div>`:''}
+      <div style="margin-top:8px;padding-top:8px;border-top:1px solid rgba(0,0,0,.05);display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <div style="display:flex;align-items:center;gap:6px">
+          <span style="font-size:11px;color:#64748b;font-weight:600">Importo:</span>
+          ${amtLabel}
+          <button onclick="editRiclassAmount('${ledger}',${i},${r.amount!=null?r.amount:'null'})"
+            style="font-size:10px;padding:2px 7px;border-radius:5px;background:#eff6ff;color:#1e40af;border:1px solid #bfdbfe;cursor:pointer">✏ Modifica</button>
+        </div>
+        ${r.note?`<span style="font-size:11px;color:#78716c;font-style:italic">📝 ${esc(r.note)}</span>`:''}
       </div>
-      <button onclick="toggleRiclass('${ledger}',${i})" title="${r.active!==false?'Disattiva':'Attiva'}"
-        style="padding:3px 9px;border-radius:6px;font-size:11px;cursor:pointer;border:1px solid;${r.active!==false?'background:#f0fdf4;color:#15803d;border-color:#bbf7d0':'background:#fef2f2;color:#dc2626;border-color:#fecaca'}">
-        ${r.active!==false?'✓ Attiva':'✗ Off'}
-      </button>
-      <button onclick="delRiclass('${ledger}',${i})" style="padding:3px 7px;border-radius:6px;font-size:11px;cursor:pointer;background:#fff;color:#dc2626;border:1px solid #fecaca">🗑</button>
     </div>`;
   }
 
@@ -2459,9 +2565,22 @@ function addRiclassForm(ledger, type) {
           </select>
         </div>
       </div>
-      <div style="margin-bottom:10px">
-        <label style="font-size:11px;font-weight:600;color:#64748b;display:block;margin-bottom:3px">Nota (opzionale):</label>
-        <input type="text" id="rc-note" placeholder="es. Crediti verso clienti riclassificati a lungo termine" style="width:100%;font-size:12px">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+        <div>
+          <label style="font-size:11px;font-weight:600;color:#64748b;display:block;margin-bottom:3px">
+            Importo parziale <span style="font-weight:400;color:#a8a29e">(lascia vuoto = sposta l'intero saldo)</span>:
+          </label>
+          <div style="display:flex;align-items:center;gap:6px">
+            <input type="number" id="rc-amount" min="0" step="0.01" placeholder="0,00 (tutto)"
+              style="flex:1;font-size:12px;font-family:monospace;text-align:right">
+            <span style="font-size:11px;color:#78716c">€</span>
+          </div>
+          <p style="font-size:10px;color:#a8a29e;margin-top:3px">Il valore si intende in valore assoluto; il segno segue il saldo del periodo.</p>
+        </div>
+        <div>
+          <label style="font-size:11px;font-weight:600;color:#64748b;display:block;margin-bottom:3px">Nota (opzionale):</label>
+          <input type="text" id="rc-note" placeholder="es. Crediti a lungo termine" style="width:100%;font-size:12px">
+        </div>
       </div>
       <div style="display:flex;gap:8px;justify-content:flex-end">
         <button class="btn btn-sec btn-sm" onclick="document.getElementById('riclass-form-area').innerHTML=''">Annulla</button>
@@ -2475,6 +2594,8 @@ function saveRiclass(ledger, type) {
   const target = document.getElementById('rc-target')?.value;
   const note   = document.getElementById('rc-note')?.value||'';
   if (!source||!target) { alert('Seleziona origine e destinazione.'); return; }
+  const amtRaw = document.getElementById('rc-amount')?.value;
+  const amount = (amtRaw && parseFloat(amtRaw) > 0) ? parseFloat(amtRaw) : null;
   const allItems = type==='account' ? S.coa : [...S.civile,...S.corporate,...S.civilistic];
   const sourceObj = allItems.find(x=>x.id===source);
   const allStructs = [...S.civile,...S.corporate,...S.civilistic];
@@ -2487,6 +2608,7 @@ function saveRiclass(ledger, type) {
     target,
     targetName: targetObj?.name||'',
     note,
+    amount,
     active: true,
   };
   const key = ledger==='civ' ? 'riclassCiv' : 'riclassIFRS';
@@ -2507,6 +2629,18 @@ function delRiclass(ledger, i) {
   const key = ledger==='civ' ? 'riclassCiv' : 'riclassIFRS';
   const rules = [...(S[key]||[])];
   rules.splice(i,1);
+  set({[key]:rules});
+  rRiclass();
+}
+
+function editRiclassAmount(ledger, i, currentAmt) {
+  const key = ledger==='civ' ? 'riclassCiv' : 'riclassIFRS';
+  const rules = [...(S[key]||[])];
+  const cur = (currentAmt != null && currentAmt !== 'null') ? currentAmt : '';
+  const raw = prompt('Importo parziale da spostare (lascia vuoto per spostare l\'intero saldo):', cur);
+  if (raw === null) return; // cancelled
+  const amount = (raw.trim() !== '' && parseFloat(raw) > 0) ? parseFloat(raw) : null;
+  rules[i] = {...rules[i], amount};
   set({[key]:rules});
   rRiclass();
 }
