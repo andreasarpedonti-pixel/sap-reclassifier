@@ -361,6 +361,7 @@ window.dispatchEvent(new Event('fb-ready'));
   <div class="pg" id="pg-import"></div>
   <div class="pg" id="pg-struct"></div>
   <div class="pg" id="pg-map"></div>
+  <div class="pg" id="pg-riclass"></div>
   <div class="pg" id="pg-report"></div>
   <div class="pg" id="pg-recon"></div>
 </div>
@@ -485,14 +486,21 @@ const SK = 'saprec5';
 const BLANK = {
   // Piano dei conti: [{id, name}]
   coa: [],
-  // Strutture: [{id, name, parentId}]
-  civile: [],
-  corporate: [],
-  // Mapping: {accountId: {civ, corp}}  — valore = ID nodo struttura
+  // Strutture: [{id, name, parentId, formula?}]
+  civile: [],        // Locale — Bilancio di Verifica (condiviso IFRS + Civilistico)
+  corporate: [],     // IFRS — Reporting Package
+  civilistic: [],    // Civilistico — VI Direttiva CEE
+  // Mapping: {accountId: {civD, civC, corpD, corpC, civ6D, civ6C}}
+  // civD/civC  = nodo Struttura Locale (bilancio di verifica)
+  // corpD/corpC = nodo Struttura Corporate IFRS (reporting package)
+  // civ6D/civ6C = nodo Struttura Civilistica VI Direttiva
   mapping: {},
-  // Bilanci caricati: [{period, dateFrom, dateTo, company,
-  //                     rows: [{id, ini, fin}]}]
-  bilanci: [],
+  // Bilanci per ledger SAP: [{period, dateFrom, dateTo, company, rows:[{id,ini,fin}]}]
+  bilIFRS: [],       // Ledger IFRS
+  bilCiv: [],        // Ledger Civilistico Italiano
+  // Riclassifiche: [{id, accountId, field, toNode, note, active}]
+  riclassIFRS: [],
+  riclassCiv: [],
   notes: {},
   recon: {},
 };
@@ -528,7 +536,9 @@ async function _fbInit() {
 window.addEventListener('fb-ready', _fbInit);
 // Se Firebase non si carica entro 5s, rimani offline
 setTimeout(() => { if (!window._fbReady) _fbSetStatus('offline'); }, 5000);
-['coa','civile','corporate','mapping','bilanci','notes','recon'].forEach(k=>{ if(!S[k]) S[k]=BLANK[k]; });
+['coa','civile','corporate','civilistic','mapping','bilIFRS','bilCiv','riclassIFRS','riclassCiv','notes','recon'].forEach(k=>{ if(!S[k]) S[k]=BLANK[k]; });
+// Migration: vecchio 'bilanci' → bilIFRS
+if (S.bilanci && S.bilanci.length && !S.bilIFRS.length) { S.bilIFRS = S.bilanci; delete S.bilanci; }
 
 // Debounce Firebase save (max 1 write ogni 2s)
 let _fbSaveTimer = null;
@@ -617,7 +627,10 @@ function fiscalYearStart(period) {
   return (m>=4?y:y-1)+'-04';
 }
 function prevBilancio(bil) {
-  const sorted=[...S.bilanci].sort((a,b)=>a.period.localeCompare(b.period));
+  // Rileva automaticamente a quale ledger appartiene il bilancio
+  const inIFRS = S.bilIFRS.some(b=>b.period===bil.period);
+  const bils = inIFRS ? S.bilIFRS : S.bilCiv;
+  const sorted=[...bils].sort((a,b)=>a.period.localeCompare(b.period));
   const idx=sorted.findIndex(b=>b.period===bil.period);
   return idx>0?sorted[idx-1]:null;
 }
@@ -662,10 +675,10 @@ function nodeTotal(struct, mapping, mapKey, bil, nodeId, mode) {
   // Se il nodo ha una formula esplicita, usala (evita doppi conteggi)
   const nodeDef = struct.find(n=>n.id===nodeId);
   if (nodeDef?.formula) return evalFormula(nodeDef.formula, struct, mapping, mapKey, bil, mode);
-  // mapKey: 'civ' o 'corp' — internamente usa civD/civC o corpD/corpC in base al segno del saldo
+  // mapKey: 'civ'|'corp'|'civ6' — usa civD/civC, corpD/corpC, civ6D/civ6C
   const scope = new Set([nodeId,...descendants(struct,nodeId)]);
-  const kD = mapKey==='civ'?'civD':'corpD';
-  const kC = mapKey==='civ'?'civC':'corpC';
+  const kD = mapKey==='civ'?'civD': mapKey==='corp'?'corpD':'civ6D';
+  const kC = mapKey==='civ'?'civC': mapKey==='corp'?'corpC':'civ6C';
   return S.coa.reduce((sum,a)=>{
     const bal = getBalance(bil, a.id, mode);
     const rawTarget = bal>=0 ? (mapping[a.id]?.[kD]||mapping[a.id]?.[kC]) : (mapping[a.id]?.[kC]||mapping[a.id]?.[kD]);
@@ -757,16 +770,18 @@ function parseSAP(rows) {
 // oppure da Excel (foglio mapping con civile)
 function parseMappingCSV(rows) {
   const h = rows[0].map(c=>String(c||'').toLowerCase().trim());
-  const iID  = h.findIndex(c=>c.includes('id')||c.includes('codice')); 
-  const iNM  = 1; // nome sempre in col 1
-  // Nuovo formato (6 col): Civ Dare, Civ Avere, Corp Dare, Corp Avere
-  const iCivD  = h.findIndex(c=>c.includes('civ')&&c.includes('dare'));
-  const iCivC  = h.findIndex(c=>c.includes('civ')&&c.includes('avere'));
+  const iID  = h.findIndex(c=>c.includes('id')||c.includes('codice'));
+  const iNM  = 1;
+  // Formato con Locale/Corp/VI Dir (8 col)
+  const iCivD  = h.findIndex(c=>(c.includes('locale')||c.includes('civ'))&&c.includes('dare'));
+  const iCivC  = h.findIndex(c=>(c.includes('locale')||c.includes('civ'))&&c.includes('avere'));
   const iCorpD = h.findIndex(c=>c.includes('corp')&&c.includes('dare'));
   const iCorpC = h.findIndex(c=>c.includes('corp')&&c.includes('avere'));
-  // Vecchio formato (4 col): Civile, Corporate — mappa su Dare e Avere uguali
-  const iCiv   = iCivD<0 ? h.findIndex(c=>c.includes('civ')||c.includes('locale')) : -1;
-  const iCorp  = iCorpD<0 ? h.findIndex(c=>c.includes('corp')) : -1;
+  const iCiv6D = h.findIndex(c=>(c.includes('vi')||c.includes('dir'))&&c.includes('dare'));
+  const iCiv6C = h.findIndex(c=>(c.includes('vi')||c.includes('dir'))&&c.includes('avere'));
+  // Vecchio formato (4 col): Civile, Corporate
+  const iCivOld  = iCivD<0 ? h.findIndex(c=>c.includes('civ')||c.includes('locale')) : -1;
+  const iCorpOld = iCorpD<0 ? h.findIndex(c=>c.includes('corp')) : -1;
   const mapping={}, coa=[];
   const seen=new Set();
   for (let i=1;i<rows.length;i++) {
@@ -776,18 +791,18 @@ function parseMappingCSV(rows) {
     if (!id) continue;
     if (!seen.has(id)) { coa.push({id,name}); seen.add(id); }
     if (iCivD>=0) {
-      // Nuovo formato
       mapping[id] = {
         civD:  String(r[iCivD]||'').trim(),
         civC:  String(r[iCivC>=0?iCivC:iCivD]||'').trim(),
         corpD: String(r[iCorpD>=0?iCorpD:4]||'').trim(),
         corpC: String(r[iCorpC>=0?iCorpC:(iCorpD>=0?iCorpD+1:5)]||'').trim(),
+        civ6D: iCiv6D>=0?String(r[iCiv6D]||'').trim():'',
+        civ6C: iCiv6C>=0?String(r[iCiv6C]||'').trim():'',
       };
     } else {
-      // Vecchio formato: civ/corp → entrambi Dare e Avere uguali
-      const c=String(r[iCiv>=0?iCiv:2]||'').trim();
-      const p=String(r[iCorp>=0?iCorp:3]||'').trim();
-      mapping[id] = { civD:c, civC:c, corpD:p, corpC:p };
+      const c=String(r[iCivOld>=0?iCivOld:2]||'').trim();
+      const p=String(r[iCorpOld>=0?iCorpOld:3]||'').trim();
+      mapping[id] = { civD:c, civC:c, corpD:p, corpC:p, civ6D:'', civ6C:'' };
     }
   }
   return {mapping, coa};
@@ -826,12 +841,13 @@ function parseMappingExcel(rows) {
 // NAVIGATION
 // ══════════════════════════════════════════════════════════
 const PAGES = [
-  {id:'dash',   label:'Dashboard',      ic:'📊'},
-  {id:'import', label:'Importa dati',   ic:'📁'},
-  {id:'struct', label:'Strutture',      ic:'🌿'},
-  {id:'map',    label:'Mapping conti',  ic:'🔗'},
-  {id:'report', label:'Report',         ic:'📋'},
-  {id:'recon',  label:'Riconciliazione',ic:'⚖️'},
+  {id:'dash',     label:'Dashboard',        ic:'📊'},
+  {id:'import',   label:'Importa dati',     ic:'📁'},
+  {id:'struct',   label:'Strutture',        ic:'🌿'},
+  {id:'map',      label:'Mapping conti',    ic:'🔗'},
+  {id:'riclass',  label:'Riclassifiche',    ic:'↔'},
+  {id:'report',   label:'Report',           ic:'📋'},
+  {id:'recon',    label:'Riconciliazione',  ic:'⚖️'},
 ];
 let page = 'dash';
 function goTo(id) { page=id; renderAll(); }
@@ -847,7 +863,7 @@ function buildNav() {
     <button class="nav-btn${p.id===page?' on':''}" onclick="goTo('${p.id}')" title="${p.label}">
       <span class="nav-ic">${p.ic}</span><span class="nav-lbl">${p.label}</span>
     </button>`).join('');
-  const co = S.bilanci[0]?.company||'';
+  const co = (S.bilIFRS[0]||S.bilCiv[0])?.company||'';
   document.getElementById('sb-co').textContent = co || '—';
 }
 
@@ -855,19 +871,19 @@ function renderAll() {
   buildNav();
   document.querySelectorAll('.pg').forEach(p=>p.classList.remove('on'));
   document.getElementById('pg-'+page)?.classList.add('on');
-  ({dash:rDash, import:rImport, struct:rStruct, map:rMap, report:rReport, recon:rRecon})[page]?.();
+  ({dash:rDash, import:rImport, struct:rStruct, map:rMap, riclass:rRiclass, report:rReport, recon:rRecon})[page]?.();
 }
 
 // ══════════════════════════════════════════════════════════
 // DASHBOARD
 // ══════════════════════════════════════════════════════════
 function dashKPI() {
-  if (!S.bilanci.length) return '';
+  const bils0 = dashLedger==='civ' ? S.bilCiv : S.bilIFRS;
+  if (!bils0.length) return '';
   const struct = S.civile.length ? S.civile : S.corporate;
   const mapKey = S.civile.length ? 'civ' : 'corp';
-  // Filtra e ordina i periodi selezionati
-  const selP = dashPeriods.length ? dashPeriods : S.bilanci.map(b=>b.period);
-  const bils = [...S.bilanci]
+  const selP = dashPeriods.length ? dashPeriods : bils0.map(b=>b.period);
+  const bils = [...bils0]
     .filter(b=>selP.includes(b.period))
     .sort((a,b)=>a.period.localeCompare(b.period));
   if (!bils.length) return '<p style="color:#a8a29e;font-size:12px">Nessun periodo selezionato.</p>';
@@ -961,10 +977,12 @@ function dashKPI() {
 }
 
 function dashToolbar() {
-  const allP = S.bilanci.map(b=>b.period).sort();
-  // Inizializza selezione con tutti i periodi se vuota
+  const bils0 = dashLedger==='civ' ? S.bilCiv : S.bilIFRS;
+  const allP = bils0.map(b=>b.period).sort();
   if (!dashPeriods.length) dashPeriods = [...allP];
   const hasH = _fileHandles.size > 0;
+  const ledgerBtns = '<button class="btn btn-sm" style="'+(dashLedger==='ifrs'?'background:#1d4ed8;color:#fff;border:1px solid #1d4ed8;':'background:#fff;color:#64748b;border:1px solid #d6d3d1;')+'" onclick="dashLedger=\'ifrs\';dashPeriods=[];rDash()">🔵 IFRS</button>'
+    + '<button class="btn btn-sm" style="'+(dashLedger==='civ'?'background:#15803d;color:#fff;border:1px solid #15803d;':'background:#fff;color:#64748b;border:1px solid #d6d3d1;')+'" onclick="dashLedger=\'civ\';dashPeriods=[];rDash()">🟢 Civilistico</button>';
 
   const periodBtns = allP.map(p => {
     const sel = dashPeriods.includes(p);
@@ -990,13 +1008,15 @@ function dashToolbar() {
     : reloadBtn;
 
   return '<div style="display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:12px;padding:8px 12px;background:#f8faff;border:1px solid #e0eaff;border-radius:10px">'
+    + ledgerBtns
+    + '<span style="width:1px;height:20px;background:#e2e8f0;margin:0 4px"></span>'
     + '<span style="font-size:13px;font-weight:600;color:#64748b;margin-right:2px">Periodi:</span>'
     + periodBtns
     + '<span style="width:1px;height:20px;background:#e2e8f0;margin:0 4px"></span>'
     + modeBtn('ytd','YTD')
     + modeBtn('ptd','PTD')
     + '<span style="width:1px;height:20px;background:#e2e8f0;margin:0 4px"></span>'
-    + reloadBtn
+    + reloadBtnFolder
     + '</div>';
 }
 
@@ -1017,54 +1037,76 @@ function dashSetMode(m) {
 
 function rDash() {
   const nCoa=S.coa.length;
-  const nBil=S.bilanci.length;
-  const nMapCiv=S.coa.filter(a=>S.mapping[a.id]?.civD).length;
+  const nBilIFRS=S.bilIFRS.length;
+  const nBilCiv=S.bilCiv.length;
+  const nMapLoc =S.coa.filter(a=>S.mapping[a.id]?.civD).length;
   const nMapCorp=S.coa.filter(a=>S.mapping[a.id]?.corpD).length;
-  const pCiv=nCoa?Math.round(nMapCiv/nCoa*100):0;
+  const nMapCiv6=S.coa.filter(a=>S.mapping[a.id]?.civ6D).length;
+  const pLoc =nCoa?Math.round(nMapLoc /nCoa*100):0;
   const pCorp=nCoa?Math.round(nMapCorp/nCoa*100):0;
+  const pCiv6=nCoa?Math.round(nMapCiv6/nCoa*100):0;
 
+  const hasBils = nBilIFRS>0||nBilCiv>0;
   document.getElementById('pg-dash').innerHTML=`
     <div class="row">
-      <div><p class="h1">Dashboard</p><p class="sub">Stato del progetto di riclassificazione.</p></div>
+      <div><p class="h1">Dashboard</p><p class="sub">Stato del progetto — due ledger SAP (IFRS + Civilistico).</p></div>
       ${nCoa?`<button class="btn btn-del btn-sm" onclick="if(confirm('Eliminare tutti i dati?'))set(()=>({...${JSON.stringify(BLANK)}}))">🗑 Reset</button>`:''}
     </div>
-    <div class="stats">
+    <div class="stats" style="grid-template-columns:repeat(5,1fr)">
       <div class="stat"><div class="stat-l">Conti piano</div><div class="stat-v" style="color:#2563eb">${nCoa}</div></div>
-      <div class="stat"><div class="stat-l">Bilanci caricati</div><div class="stat-v" style="color:#0891b2">${nBil}</div></div>
-      <div class="stat"><div class="stat-l">Mapp. Civile</div><div class="stat-v" style="color:#15803d">${pCiv}%</div></div>
-      <div class="stat"><div class="stat-l">Mapp. Corporate</div><div class="stat-v" style="color:#7e22ce">${pCorp}%</div></div>
+      <div class="stat"><div class="stat-l">🔵 Bilanci IFRS</div><div class="stat-v" style="color:#1d4ed8">${nBilIFRS}</div></div>
+      <div class="stat"><div class="stat-l">🟢 Bilanci Civ.</div><div class="stat-v" style="color:#15803d">${nBilCiv}</div></div>
+      <div class="stat"><div class="stat-l">Mapp. Locale</div><div class="stat-v" style="color:#15803d">${pLoc}%</div></div>
+      <div class="stat"><div class="stat-l">Mapp. Corp/VI Dir</div><div class="stat-v" style="color:#7e22ce">${pCorp}% / ${pCiv6}%</div></div>
     </div>
-    ${S.bilanci.length&&S.coa.length ? dashToolbar()+dashKPI() : '<p style="color:#a8a29e;font-size:13px;margin-top:20px">Carica bilanci e mapping per vedere i KPI.</p>'}
+    ${hasBils&&nCoa ? dashToolbar()+dashKPI() : '<p style="color:#a8a29e;font-size:13px;margin-top:20px">Carica bilanci e mapping per vedere i KPI.</p>'}
   `;
 }
-function delBil(period) {
-  if(!confirm('Eliminare periodo '+period+'?')) return;
-  _fileHandles.delete(period);
-  set(s=>({bilanci:s.bilanci.filter(b=>b.period!==period)}));
+function delBil(period, ledger) {
+  if(!confirm('Eliminare periodo '+period+' dal ledger '+(ledger==='civ'?'Civilistico':'IFRS')+'?')) return;
+  _fileHandles.delete((ledger||'ifrs')+'::'+period);
+  if (ledger==='civ') set(s=>({bilCiv:s.bilCiv.filter(b=>b.period!==period)}));
+  else set(s=>({bilIFRS:s.bilIFRS.filter(b=>b.period!==period)}));
   rImpTab();
 }
 
 // ══════════════════════════════════════════════════════════
 // IMPORT
 // ══════════════════════════════════════════════════════════
-let impTab='bil';
+let impTab='ifrs';       // 'ifrs' | 'civ'
+let impLedger='ifrs';   // ledger attivo per caricamento bilanci
 // Dashboard state
-let dashMode='ytd';           // 'ytd' | 'ptd'
-let dashPeriods=[];           // [] = tutti
+let dashMode='ytd';     // 'ytd' | 'ptd'
+let dashLedger='ifrs';  // 'ifrs' | 'civ'
+let dashPeriods=[];     // [] = tutti
 
 function rImport() {
   const pg=document.getElementById('pg-import');
   pg.innerHTML=`
-    <div class="row"><div><p class="h1">Importa Dati</p><p class="sub">Carica bilanci SAP, piano dei conti e mapping.</p></div></div>
-    <div class="tabs">
-      <button class="tab${impTab==='bil'?' on':''}" onclick="impTab='bil';rImport()">💰 Bilancio SAP</button>
+    <div class="row"><div><p class="h1">Importa Dati</p><p class="sub">Carica bilanci SAP per Ledger IFRS o Civilistico.</p></div></div>
+    <div style="display:flex;gap:6px;margin-bottom:14px;padding:4px;background:#f5f5f4;border-radius:9px">
+      <button class="btn${impTab==='ifrs'?' btn-pri':' btn-sec'}" style="flex:1;justify-content:center;font-size:12px" onclick="impTab='ifrs';rImport()">
+        🔵 Ledger IFRS
+        <span style="font-size:10px;opacity:.7;margin-left:4px">(${S.bilIFRS.length} periodi)</span>
+      </button>
+      <button class="btn${impTab==='civ'?' btn-pri':' btn-sec'}" style="flex:1;justify-content:center;font-size:12px" onclick="impTab='civ';rImport()">
+        🟢 Ledger Civilistico
+        <span style="font-size:10px;opacity:.7;margin-left:4px">(${S.bilCiv.length} periodi)</span>
+      </button>
     </div>
     <div id="imp-body"></div>`;
+  impLedger=impTab;
   rImpTab();
 }
 function rBilUI() {
   const hasFolder  = !!_folderHandle;
   const hasHandles = _fileHandles.size > 0;
+  const ledger = impLedger; // 'ifrs' o 'civ'
+  const bils = ledger==='civ' ? S.bilCiv : S.bilIFRS;
+  const ledgerLabel = ledger==='civ' ? '🟢 Civilistico' : '🔵 IFRS';
+  const ledgerColor = ledger==='civ' ? '#166534' : '#1e40af';
+  const ledgerBg    = ledger==='civ' ? '#f0fdf4' : '#eff6ff';
+  const ledgerBorder= ledger==='civ' ? '#bbf7d0' : '#bfdbfe';
 
   const folderBar = hasFolder
     ? '<div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:9px;margin-bottom:10px">'
@@ -1079,21 +1121,21 @@ function rBilUI() {
     ? '<button class="btn btn-sm" style="background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;font-weight:600" onclick="reloadAll()">\uD83D\uDD04 Ricarica tutto (' + _fileHandles.size + ')</button>'
     : '';
 
-  const periodi = S.bilanci.map(function(b) {
-    const hasH = _fileHandles.has(b.period);
+  const periodi = bils.map(function(b) {
+    const hasH = _fileHandles.has(ledger+'::'+b.period);
     const reloadOne = hasH
-      ? '<button class="btn btn-sm" style="background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe" title="Ricarica dal file" onclick="reloadBil(\'' + esc(b.period) + '\')">\uD83D\uDD04</button>'
+      ? '<button class="btn btn-sm" style="background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe" title="Ricarica dal file" onclick="reloadBil(\'' + esc(b.period) + '\',\'' + ledger + '\')">\uD83D\uDD04</button>'
       : '<span style="color:#d1d5db;font-size:11px;padding:4px 6px" title="Ricarica manualmente">\u26a0</span>';
-    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:#fafaf9;border:1px solid #e7e5e4;border-radius:9px;margin-bottom:6px;font-size:12px">'
-      + '<span><b style="font-family:monospace;color:#1e40af">' + esc(b.period) + '</b> \u2014 ' + esc(b.dateFrom) + ' \u2192 ' + esc(b.dateTo) + ' \u2014 <span style="color:#78716c">' + b.rows.length + ' conti</span></span>'
+    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:'+ledgerBg+';border:1px solid '+ledgerBorder+';border-radius:9px;margin-bottom:6px;font-size:12px">'
+      + '<span><b style="font-family:monospace;color:'+ledgerColor+'">' + esc(b.period) + '</b> \u2014 ' + esc(b.dateFrom) + ' \u2192 ' + esc(b.dateTo) + ' \u2014 <span style="color:#78716c">' + b.rows.length + ' conti</span></span>'
       + '<span style="display:flex;gap:5px">' + reloadOne
-      + '<button class="btn btn-del btn-sm" onclick="delBil(\'' + esc(b.period) + '\')">\uD83D\uDDD1</button>'
+      + '<button class="btn btn-del btn-sm" onclick="delBil(\'' + esc(b.period) + '\',\'' + ledger + '\')">\uD83D\uDDD1</button>'
       + '</span></div>';
   }).join('');
 
-  const periodiHtml = S.bilanci.length
+  const periodiHtml = bils.length
     ? '<div style="margin-top:14px">' + periodi + '</div>'
-    : '<p style="font-size:12px;color:#a8a29e;margin-top:10px">Nessun periodo caricato.</p>';
+    : '<p style="font-size:12px;color:#a8a29e;margin-top:10px">Nessun periodo caricato per questo ledger.</p>';
 
   const upzText = hasFolder
     ? '<p style="font-weight:600;font-size:13px;margin-bottom:3px">Clicca per ricaricare dalla cartella</p>'
@@ -1103,11 +1145,11 @@ function rBilUI() {
 
   return '<div class="card">'
     + '<div class="card-hd" style="display:flex;justify-content:space-between;align-items:center">'
-    + '<span>\uD83D\uDCB0 Carica Bilancio SAP (.xlsx)</span>' + reloadBtn
+    + '<span style="color:'+ledgerColor+'">' + ledgerLabel + ' — Carica Bilancio SAP (.xlsx)</span>' + reloadBtn
     + '</div>'
     + '<div class="card-bd">'
     + folderBar
-    + '<p style="font-size:12px;color:#78716c;margin-bottom:12px;line-height:1.6">Estrai il bilancio di verifica da SAP (query <b>2CCFITRIALBALQ0001</b>).<br>Il periodo viene letto automaticamente dall\'intestazione. Puoi caricare pi\u00f9 periodi.</p>'
+    + '<p style="font-size:12px;color:#78716c;margin-bottom:12px;line-height:1.6">Estrai il bilancio da SAP (query <b>2CCFITRIALBALQ0001</b>) per il ledger <b>' + ledgerLabel + '</b>.<br>Data inizio e data fine periodo vengono letti automaticamente dall\'intestazione SAP. Puoi caricare pi\u00f9 periodi.</p>'
     + '<div class="upz" onclick="hasFolder?loadFromFolder(false):pickBilFile()">'
     + '<div style="font-size:28px;margin-bottom:8px">\uD83D\uDCC2</div>'
     + upzText
@@ -1124,7 +1166,7 @@ function rBilUI() {
 
 function rImpTab() {
   const el=document.getElementById('imp-body'); if(!el) return;
-  if (impTab==='bil') {
+  if (impTab==='ifrs' || impTab==='civ') {
     el.innerHTML = rBilUI();
   } else {
     el.innerHTML=`<div class="card"><div class="card-hd">🔗 Carica Mapping / Piano dei Conti</div><div class="card-bd">
@@ -1153,7 +1195,9 @@ function showMsg(id,type,html) {
 async function impBil(inp) {
   const files=[...inp.files].filter(f=>!f.name.startsWith('~$'));
   if(!files.length) return;
-  showMsg('msg-bil','info','Lettura file...');
+  const ledger = impLedger; // 'ifrs' o 'civ'
+  const bilKey = ledger==='civ' ? 'bilCiv' : 'bilIFRS';
+  showMsg('msg-bil','info','Lettura file (Ledger '+(ledger==='civ'?'Civilistico':'IFRS')+')...');
   let ok=0, err=[];
   for (const f of files) {
     try {
@@ -1162,15 +1206,15 @@ async function impBil(inp) {
       const bil = parseSAP(rows);
       if (!bil) { err.push(f.name+': formato non riconosciuto'); continue; }
       set(s=>{
-        const others = s.bilanci.filter(b=>b.period!==bil.period);
-        return { bilanci: [...others, bil].sort((a,b)=>a.period.localeCompare(b.period)) };
+        const others = (s[bilKey]||[]).filter(b=>b.period!==bil.period);
+        return { [bilKey]: [...others, bil].sort((a,b)=>a.period.localeCompare(b.period)) };
       });
       // Salva handle per auto-reload (File System Access API)
-      if (f.handle) _fileHandles.set(bil.period, { handle: f.handle, period: bil.period });
+      if (f.handle) _fileHandles.set(ledger+'::'+bil.period, { handle: f.handle, period: bil.period, ledger });
       ok++;
     } catch(e) { err.push(f.name+': '+e.message); }
   }
-  const msg = ok ? `✓ ${ok} bilancio/i importato/i.` : '';
+  const msg = ok ? `✓ ${ok} bilancio/i importato/i nel ledger ${ledger==='civ'?'Civilistico':'IFRS'}.` : '';
   const errMsg = err.length ? '<br>⚠ '+err.join('<br>') : '';
   showMsg('msg-bil', ok?'ok':'err', msg+errMsg);
   inp.value='';
@@ -1178,11 +1222,12 @@ async function impBil(inp) {
 }
 
 // Ricarica un singolo bilancio dal suo file handle
-async function reloadBil(period) {
-  const entry = _fileHandles.get(period);
+async function reloadBil(period, ledger) {
+  const fkey = (ledger||'ifrs')+'::'+period;
+  const entry = _fileHandles.get(fkey);
   if (!entry) { alert('Handle non disponibile — ricarica il file manualmente.'); return; }
+  const bilKey = (ledger||'ifrs')==='civ' ? 'bilCiv' : 'bilIFRS';
   try {
-    // Verifica permesso lettura
     const perm = await entry.handle.queryPermission({ mode: 'read' });
     if (perm !== 'granted') {
       const req = await entry.handle.requestPermission({ mode: 'read' });
@@ -1192,8 +1237,8 @@ async function reloadBil(period) {
     const wb = await XLSX.read(await file.arrayBuffer());
     const bil = parseSAP(wb.Sheets[wb.SheetNames[0]]);
     if (!bil) { alert(entry.handle.name + ': formato non riconosciuto'); return; }
-    set(s=>({ bilanci: [...s.bilanci.filter(b=>b.period!==bil.period), bil].sort((a,b)=>a.period.localeCompare(b.period)) }));
-    _fileHandles.set(bil.period, { handle: entry.handle, period: bil.period });
+    set(s=>({ [bilKey]: [...(s[bilKey]||[]).filter(b=>b.period!==bil.period), bil].sort((a,b)=>a.period.localeCompare(b.period)) }));
+    _fileHandles.set(fkey, { handle: entry.handle, period: bil.period, ledger: ledger||'ifrs' });
     rImpTab();
     showMsg('msg-bil','ok','✓ Periodo '+period+' ricaricato.');
   } catch(e) { alert('Errore: '+e.message); }
@@ -1204,17 +1249,19 @@ async function reloadAll() {
   if (!_fileHandles.size) { alert('Nessun file handle disponibile. Carica i file almeno una volta in questa sessione.'); return; }
   showMsg('msg-bil','info','🔄 Ricarico tutti i file...');
   let ok=0, err=[];
-  for (const [period, entry] of _fileHandles) {
+  for (const [fkey, entry] of _fileHandles) {
     try {
       const perm = await entry.handle.queryPermission({ mode: 'read' });
       if (perm !== 'granted') await entry.handle.requestPermission({ mode: 'read' });
       const file = await entry.handle.getFile();
       const wb = await XLSX.read(await file.arrayBuffer());
       const bil = parseSAP(wb.Sheets[wb.SheetNames[0]]);
-      if (!bil) { err.push(period+': non riconosciuto'); continue; }
-      set(s=>({ bilanci: [...s.bilanci.filter(b=>b.period!==bil.period), bil].sort((a,b)=>a.period.localeCompare(b.period)) }));
+      if (!bil) { err.push(fkey+': non riconosciuto'); continue; }
+      const ledger = entry.ledger || 'ifrs';
+      const bilKey = ledger==='civ' ? 'bilCiv' : 'bilIFRS';
+      set(s=>({ [bilKey]: [...(s[bilKey]||[]).filter(b=>b.period!==bil.period), bil].sort((a,b)=>a.period.localeCompare(b.period)) }));
       ok++;
-    } catch(e) { err.push(period+': '+e.message); }
+    } catch(e) { err.push(fkey+': '+e.message); }
   }
   rImpTab();
   const msg = ok ? '✓ '+ok+' periodo/i ricaricato/i.' : '';
@@ -1227,12 +1274,14 @@ async function pickBilFile() {
   if (!window.showOpenFilePicker) {
     document.getElementById('fi-bil').click(); return;
   }
+  const ledger = impLedger;
+  const bilKey = ledger==='civ' ? 'bilCiv' : 'bilIFRS';
   try {
     const handles = await window.showOpenFilePicker({
       multiple: true,
       types: [{ description: 'SAP Excel', accept: { 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'] } }]
     });
-    showMsg('msg-bil','info','Lettura file...');
+    showMsg('msg-bil','info','Lettura file (Ledger '+(ledger==='civ'?'Civilistico':'IFRS')+')...');
     let ok=0, err=[];
     for (const handle of handles) {
       try {
@@ -1240,13 +1289,13 @@ async function pickBilFile() {
         const wb = await XLSX.read(await file.arrayBuffer());
         const bil = parseSAP(wb.Sheets[wb.SheetNames[0]]);
         if (!bil) { err.push(handle.name+': formato non riconosciuto'); continue; }
-        set(s=>({ bilanci: [...s.bilanci.filter(b=>b.period!==bil.period), bil].sort((a,b)=>a.period.localeCompare(b.period)) }));
-        _fileHandles.set(bil.period, { handle, period: bil.period });
+        set(s=>({ [bilKey]: [...(s[bilKey]||[]).filter(b=>b.period!==bil.period), bil].sort((a,b)=>a.period.localeCompare(b.period)) }));
+        _fileHandles.set(ledger+'::'+bil.period, { handle, period: bil.period, ledger });
         ok++;
       } catch(e) { err.push(handle.name+': '+e.message); }
     }
     rImpTab();
-    const msg = ok ? '✓ '+ok+' bilancio/i importato/i — 🔄 ricarica automatica attiva.' : '';
+    const msg = ok ? '✓ '+ok+' bilancio/i importato/i nel ledger '+(ledger==='civ'?'Civilistico':'IFRS')+' — 🔄 ricarica automatica attiva.' : '';
     const errMsg = err.length ? '<br>⚠ '+err.join('<br>') : '';
     showMsg('msg-bil', ok?'ok':'err', msg+errMsg);
   } catch(e) { if (e.name!=='AbortError') alert('Errore: '+e.message); }
@@ -1276,7 +1325,9 @@ async function loadFromFolder(silent) {
     const req = await _folderHandle.requestPermission({ mode: "read" });
     if (req !== "granted") { alert("Permesso negato."); return; }
   }
-  if (!silent) showMsg("msg-bil","info","🔄 Lettura cartella …");
+  const ledger = impLedger;
+  const bilKey = ledger==='civ' ? 'bilCiv' : 'bilIFRS';
+  if (!silent) showMsg("msg-bil","info","🔄 Lettura cartella (Ledger "+(ledger==='civ'?'Civilistico':'IFRS')+") …");
   let ok=0, changed=0, skipped=0, errs=[];
   for await (const [name, entry] of _folderHandle.entries()) {
     if (entry.kind !== "file") continue;
@@ -1289,9 +1340,9 @@ async function loadFromFolder(silent) {
       if (!sheetName || !wb.Sheets[sheetName]) { skipped++; continue; }
       const bil  = parseSAP(wb.Sheets[sheetName]);
       if (!bil) { skipped++; continue; }
-      set(s=>({ bilanci:[...s.bilanci.filter(b=>b.period!==bil.period),bil]
+      set(s=>({ [bilKey]:[...(s[bilKey]||[]).filter(b=>b.period!==bil.period),bil]
                           .sort((a,b)=>a.period.localeCompare(b.period)) }));
-      _fileHandles.set(bil.period, { handle:entry, period:bil.period });
+      _fileHandles.set(ledger+'::'+bil.period, { handle:entry, period:bil.period, ledger });
       ok++; changed++;
     } catch(e) { errs.push(name+": "+e.message); }
   }
@@ -1356,13 +1407,20 @@ async function impMap(inp) {
 // ══════════════════════════════════════════════════════════
 function rStruct() {
   document.getElementById('pg-struct').innerHTML=`
-    <div style="display:flex;flex-direction:column;flex:1;min-height:0"><div class="row"><div><p class="h1">Strutture</p><p class="sub">Gestisci le gerarchie di riclassificazione Civile e Corporate.</p></div></div>
-    <div class="sg" style="flex:1;min-height:0">
-      <div id="s-civ" style="display:flex;flex-direction:column"></div>
-      <div id="s-corp" style="display:flex;flex-direction:column"></div>
-    </div></div>`;
-  renderSBox('civ','Struttura Civile',S.civile,'#f0fdf4','#bbf7d0','#14532d');
-  renderSBox('corp','Struttura Corporate',S.corporate,'#faf5ff','#e9d5ff','#581c87');
+    <div style="display:flex;flex-direction:column;flex:1;min-height:0">
+      <div class="row">
+        <div><p class="h1">Strutture</p>
+          <p class="sub">Tre gerarchie: Locale (condivisa), IFRS Corporate, Civilistico VI Direttiva CEE.</p></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;flex:1;min-height:0">
+        <div id="s-civ" style="display:flex;flex-direction:column"></div>
+        <div id="s-corp" style="display:flex;flex-direction:column"></div>
+        <div id="s-civ6" style="display:flex;flex-direction:column"></div>
+      </div>
+    </div>`;
+  renderSBox('civ','Struttura Locale (Bilancio di Verifica)',S.civile,'#f0fdf4','#bbf7d0','#14532d');
+  renderSBox('corp','IFRS Corporate (Reporting Package)',S.corporate,'#faf5ff','#e9d5ff','#581c87');
+  renderSBox('civ6','Civilistico — VI Direttiva CEE',S.civilistic,'#fefce8','#fde68a','#854d0e');
 }
 
 function renderSBox(key,title,struct,bg,border,col) {
@@ -1392,13 +1450,16 @@ function renderSBox(key,title,struct,bg,border,col) {
 
 // Nodi espansi nella vista struttura
 const _sExpanded = {};
+function _sboxCfg(key) {
+  if(key==='civ')  return {t:'Struttura Locale (Bilancio di Verifica)',s:S.civile,    bg:'#f0fdf4',br:'#bbf7d0',co:'#14532d'};
+  if(key==='corp') return {t:'IFRS Corporate (Reporting Package)',      s:S.corporate, bg:'#faf5ff',br:'#e9d5ff',co:'#581c87'};
+                   return {t:'Civilistico — VI Direttiva CEE',          s:S.civilistic,bg:'#fefce8',br:'#fde68a',co:'#854d0e'};
+}
 function toggleSNode(key,nid){
   if(!_sExpanded[key]) _sExpanded[key]=new Set();
   if(_sExpanded[key].has(nid)) _sExpanded[key].delete(nid);
   else _sExpanded[key].add(nid);
-  const cfg=key==='civ'
-    ?{t:'Struttura Civile',s:S.civile,bg:'#f0fdf4',br:'#bbf7d0',co:'#14532d'}
-    :{t:'Struttura Corporate',s:S.corporate,bg:'#faf5ff',br:'#e9d5ff',co:'#581c87'};
+  const cfg=_sboxCfg(key);
   renderSBox(key,cfg.t,cfg.s,cfg.bg,cfg.br,cfg.co);
 }
 function renderNode(key,struct,node,lv,col) {
@@ -1423,30 +1484,32 @@ function renderNode(key,struct,node,lv,col) {
   </div>`;
 }
 
+function _structByKey(key){ return key==='civ'?S.civile:key==='corp'?S.corporate:S.civilistic; }
+function _setStruct(key,s){ if(key==='civ') set({civile:s}); else if(key==='corp') set({corporate:s}); else set({civilistic:s}); }
+
 function addNode(key,parentId) {
   const id=(document.getElementById('sid-'+key)?.value||'').trim();
   const nm=(document.getElementById('snm-'+key)?.value||'').trim();
   if(!id||!nm){alert('Inserisci ID e Nome');return;}
-  const struct=key==='civ'?[...S.civile]:[...S.corporate];
+  const struct=[..._structByKey(key)];
   if(struct.some(n=>n.id===id)){alert('ID già presente');return;}
   struct.push({id,name:nm,parentId:parentId||null});
-  if(key==='civ') set({civile:struct}); else set({corporate:struct});
+  _setStruct(key,struct);
 }
 function addNodeChild(key,parentId) {
   const id=prompt('ID figlio di "'+parentId+'":'); if(!id) return;
   const nm=prompt('Nome:'); if(!nm) return;
-  const struct=key==='civ'?[...S.civile]:[...S.corporate];
+  const struct=[..._structByKey(key)];
   if(struct.some(n=>n.id===id)){alert('ID già presente');return;}
   struct.push({id,name:nm,parentId});
-  if(key==='civ') set({civile:struct}); else set({corporate:struct});
+  _setStruct(key,struct);
 }
 function delNode(key,id) {
   if(!confirm('Eliminare "'+id+'" e tutti i figli?')) return;
-  const orig=key==='civ'?S.civile:S.corporate;
+  const orig=_structByKey(key);
   const del=new Set([id]); let ch=true;
   while(ch){ch=false;orig.forEach(n=>{if(n.parentId&&del.has(n.parentId)&&!del.has(n.id)){del.add(n.id);ch=true;}});}
-  const struct=orig.filter(n=>!del.has(n.id));
-  if(key==='civ') set({civile:struct}); else set({corporate:struct});
+  _setStruct(key,orig.filter(n=>!del.has(n.id)));
 }
 async function importStruct(key,inp) {
   const f=inp.files[0]; if(!f) return;
@@ -1475,14 +1538,16 @@ async function importStruct(key,inp) {
     out.forEach(n=>{ if(n.parentId && !outIds.has(n.parentId)) missingRoots.add(n.parentId); });
     missingRoots.forEach(id=>{ out.unshift({id, name:id, parentId:null}); });
     if(!out.length){alert('Nessun nodo trovato');inp.value='';return;}
-    if(!confirm(`Trovati ${out.length} nodi. Sostituire la struttura ${key==='civ'?'Civile':'Corporate'}?`)){inp.value='';return;}
-    if(key==='civ') { set({civile:out}); renderSBox('civ','Struttura Civile',out,'#f0fdf4','#bbf7d0','#14532d'); }
-    else { set({corporate:out}); renderSBox('corp','Struttura Corporate',out,'#faf5ff','#e9d5ff','#581c87'); }
+    const labels={civ:'Locale',corp:'IFRS Corporate',civ6:'Civilistico VI Dir'};
+    if(!confirm(`Trovati ${out.length} nodi. Sostituire la struttura ${labels[key]||key}?`)){inp.value='';return;}
+    const cfg=_sboxCfg(key);
+    _setStruct(key,out);
+    renderSBox(key,cfg.t,out,cfg.bg,cfg.br,cfg.co);
   } catch(e){alert('Errore: '+e.message);}
   inp.value='';
 }
 function exportStructCSV(key) {
-  const struct=key==='civ'?S.civile:S.corporate;
+  const struct=_structByKey(key);
   const rows=['ID,Nome,ParentID,Formula',...struct.map(n=>[n.id,n.name,n.parentId||'',n.formula||''].map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(','))];
   const a=document.createElement('a');
   a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(rows.join('\n'));
@@ -1497,23 +1562,23 @@ let _openDrop=null;
 
 function rMap() {
   const total=S.coa.length;
-  const nCiv=S.coa.filter(a=>S.mapping[a.id]?.civD).length;
-  const nCorp=S.coa.filter(a=>S.mapping[a.id]?.corpD).length;
-
   const nCoaM=S.coa.length;
-  const nMCiv=S.coa.filter(a=>S.mapping[a.id]?.civD||S.mapping[a.id]?.civC).length;
+  const nMCiv =S.coa.filter(a=>S.mapping[a.id]?.civD ||S.mapping[a.id]?.civC).length;
   const nMCorp=S.coa.filter(a=>S.mapping[a.id]?.corpD||S.mapping[a.id]?.corpC).length;
-  const pMCiv=nCoaM?Math.round(nMCiv/nCoaM*100):0;
+  const nMCiv6=S.coa.filter(a=>S.mapping[a.id]?.civ6D||S.mapping[a.id]?.civ6C).length;
+  const pMCiv =nCoaM?Math.round(nMCiv /nCoaM*100):0;
   const pMCorp=nCoaM?Math.round(nMCorp/nCoaM*100):0;
+  const pMCiv6=nCoaM?Math.round(nMCiv6/nCoaM*100):0;
   document.getElementById('pg-map').innerHTML=`
     <div style="display:flex;flex-direction:column;height:100%"><div class="row">
-      <div><p class="h1">Mapping Conti</p><p class="sub">Collega ogni conto a un nodo della struttura.</p></div>
+      <div><p class="h1">Mapping Conti</p><p class="sub">Collega ogni conto alle tre strutture (Locale, IFRS Corporate, Civilistico VI Dir).</p></div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
         <button class="btn btn-sec btn-sm" onclick="expMapCSV()">⬇ Esporta CSV</button>
         <label class="btn btn-sec btn-sm" style="cursor:pointer">⬆ Importa CSV/XLSX<input type="file" accept=".csv,.xlsx" class="hidden" onchange="impMapCSV(this)"></label>
         <span style="display:inline-block;width:1px;height:20px;background:#e7e5e4;margin:0 3px;flex-shrink:0"></span>
-        <button class="btn btn-sm" style="background:#f0fdf4;color:#166534;border:1px solid #bbf7d0;font-weight:600" onclick="clearMapping('civ')">🗑 Azzera Civile</button>
-        <button class="btn btn-sm" style="background:#faf5ff;color:#6b21a8;border:1px solid #e9d5ff;font-weight:600" onclick="clearMapping('corp')">🗑 Azzera Corporate</button>
+        <button class="btn btn-sm" style="background:#f0fdf4;color:#166534;border:1px solid #bbf7d0;font-weight:600" onclick="clearMapping('civ')">🗑 Locale</button>
+        <button class="btn btn-sm" style="background:#faf5ff;color:#6b21a8;border:1px solid #e9d5ff;font-weight:600" onclick="clearMapping('corp')">🗑 IFRS Corp</button>
+        <button class="btn btn-sm" style="background:#fefce8;color:#854d0e;border:1px solid #fde68a;font-weight:600" onclick="clearMapping('civ6')">🗑 VI Dir</button>
       </div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;margin-bottom:12px">
@@ -1522,20 +1587,22 @@ function rMap() {
         <p style="font-size:18px;font-weight:700;font-family:monospace;color:#1d4ed8">${total}</p>
       </div>
       <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:10px 13px">
-        <p style="font-size:10px;color:#78716c;margin-bottom:2px">📊 Civile</p>
+        <p style="font-size:10px;color:#78716c;margin-bottom:2px">🔵 Locale (IFRS+Civ)</p>
         <p style="font-size:18px;font-weight:700;font-family:monospace;color:#15803d">${pMCiv}%</p>
         <div class="bar" style="margin-top:4px"><div class="bar-f" style="width:${pMCiv}%;background:#22c55e"></div></div>
         <p style="font-size:10px;color:#a8a29e;margin-top:2px">${nMCiv} / ${nCoaM}</p>
       </div>
       <div style="background:#faf5ff;border:1px solid #e9d5ff;border-radius:10px;padding:10px 13px">
-        <p style="font-size:10px;color:#78716c;margin-bottom:2px">🏢 Corporate</p>
+        <p style="font-size:10px;color:#78716c;margin-bottom:2px">🏢 IFRS Corporate</p>
         <p style="font-size:18px;font-weight:700;font-family:monospace;color:#7e22ce">${pMCorp}%</p>
         <div class="bar" style="margin-top:4px"><div class="bar-f" style="width:${pMCorp}%;background:#a855f7"></div></div>
         <p style="font-size:10px;color:#a8a29e;margin-top:2px">${nMCorp} / ${nCoaM}</p>
       </div>
-      <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:10px 13px">
-        <p style="font-size:10px;color:#78716c;margin-bottom:2px">✓ Completi</p>
-        <p style="font-size:18px;font-weight:700;font-family:monospace;color:#b45309">${S.coa.filter(a=>(S.mapping[a.id]?.civD||S.mapping[a.id]?.civC)&&(S.mapping[a.id]?.corpD||S.mapping[a.id]?.corpC)).length}/${total}</p>
+      <div style="background:#fefce8;border:1px solid #fde68a;border-radius:10px;padding:10px 13px">
+        <p style="font-size:10px;color:#78716c;margin-bottom:2px">📜 VI Direttiva</p>
+        <p style="font-size:18px;font-weight:700;font-family:monospace;color:#854d0e">${pMCiv6}%</p>
+        <div class="bar" style="margin-top:4px"><div class="bar-f" style="width:${pMCiv6}%;background:#f59e0b"></div></div>
+        <p style="font-size:10px;color:#a8a29e;margin-top:2px">${nMCiv6} / ${nCoaM}</p>
       </div>
     </div>
     <div style="display:flex;gap:8px;margin-bottom:10px;align-items:center">
@@ -1549,12 +1616,14 @@ function rMap() {
     </div>
     ${total===0?`<div class="alert warn">⚠ Nessun piano dei conti caricato. Vai su "Importa dati".</div>`:`
     <div class="mt">
-      <div class="mh">
+      <div class="mh" style="grid-template-columns:24px 100px 1fr 110px 110px 110px 110px 110px 110px">
         <div></div><div>Codice</div><div>Nome</div>
-        <div style="background:rgba(240,253,244,.7);border-left:2px solid #bbf7d0;color:#15803d;font-size:9px">CIV DARE</div>
-        <div style="background:rgba(240,253,244,.7);border-left:1px solid #bbf7d0;color:#15803d;font-size:9px">CIV AVERE</div>
-        <div style="background:rgba(250,245,255,.7);border-left:2px solid #e9d5ff;color:#7e22ce;font-size:9px">CORP DARE</div>
-        <div style="background:rgba(250,245,255,.7);border-left:1px solid #e9d5ff;color:#7e22ce;font-size:9px">CORP AVERE</div>
+        <div style="background:rgba(240,253,244,.7);border-left:2px solid #bbf7d0;color:#15803d;font-size:9px">LOCALE DARE</div>
+        <div style="background:rgba(240,253,244,.7);border-left:1px solid #bbf7d0;color:#15803d;font-size:9px">LOCALE AVERE</div>
+        <div style="background:rgba(250,245,255,.7);border-left:2px solid #e9d5ff;color:#7e22ce;font-size:9px">IFRS CORP DARE</div>
+        <div style="background:rgba(250,245,255,.7);border-left:1px solid #e9d5ff;color:#7e22ce;font-size:9px">IFRS CORP AVERE</div>
+        <div style="background:rgba(254,252,232,.7);border-left:2px solid #fde68a;color:#854d0e;font-size:9px">VI DIR DARE</div>
+        <div style="background:rgba(254,252,232,.7);border-left:1px solid #fde68a;color:#854d0e;font-size:9px">VI DIR AVERE</div>
       </div>
       <div class="mb" id="map-rows"></div>
     </div>`}`;
@@ -1567,9 +1636,9 @@ function rMapRows() {
   const filt=S.coa.filter(a=>{
     if(lo&&!a.id.toLowerCase().includes(lo)&&!a.name.toLowerCase().includes(lo)) return false;
     const m=S.mapping[a.id]||{};
-    const hasCiv=!!(m.civD||m.civC), hasCorp=!!(m.corpD||m.corpC);
-    if(mapFilt==='done'&&!(hasCiv&&hasCorp)) return false;
-    if(mapFilt==='inc'&&hasCiv&&hasCorp) return false;
+    const hasCiv=!!(m.civD||m.civC), hasCorp=!!(m.corpD||m.corpC), hasCiv6=!!(m.civ6D||m.civ6C);
+    if(mapFilt==='done'&&!(hasCiv&&hasCorp&&hasCiv6)) return false;
+    if(mapFilt==='inc'&&hasCiv&&hasCorp&&hasCiv6) return false;
     return true;
   });
   const cnt=document.getElementById('map-cnt');
@@ -1577,17 +1646,20 @@ function rMapRows() {
   if(!filt.length){el.innerHTML='<p style="text-align:center;padding:24px;color:#a8a29e;font-size:12px">Nessun conto trovato.</p>';return;}
   el.innerHTML=filt.map(a=>{
     const m=S.mapping[a.id]||{};
-    const hasCiv=!!(m.civD||m.civC), hasCorp=!!(m.corpD||m.corpC);
-    const ok=hasCiv&&hasCorp, half=(hasCiv||hasCorp)&&!ok;
+    const hasCiv=!!(m.civD||m.civC), hasCorp=!!(m.corpD||m.corpC), hasCiv6=!!(m.civ6D||m.civ6C);
+    const ok=hasCiv&&hasCorp&&hasCiv6;
+    const half=(hasCiv||hasCorp||hasCiv6)&&!ok;
     const ic=ok?'<span style="color:#22c55e;font-size:14px">✓</span>':half?'<span style="color:#f59e0b;font-size:14px">◑</span>':'<span style="color:#d6d3d1;font-size:14px">○</span>';
-    return `<div class="mr">
+    return `<div class="mr" style="grid-template-columns:24px 100px 1fr 110px 110px 110px 110px 110px 110px">
       <div style="text-align:center">${ic}</div>
       <div><span class="mono" style="font-size:13px">${esc(a.id)}</span></div>
       <div style="font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(a.name)}">${esc(a.name)}</div>
-      <div style="background:rgba(240,253,244,.4);border-left:2px solid #bbf7d0">${mkSel(a.id,'civD',S.civile,m.civD||'')}</div>
-      <div style="background:rgba(240,253,244,.25);border-left:1px solid #bbf7d0">${mkSel(a.id,'civC',S.civile,m.civC||'')}</div>
-      <div style="background:rgba(250,245,255,.4);border-left:2px solid #e9d5ff">${mkSel(a.id,'corpD',S.corporate,m.corpD||'')}</div>
-      <div style="background:rgba(250,245,255,.25);border-left:1px solid #e9d5ff">${mkSel(a.id,'corpC',S.corporate,m.corpC||'')}</div>
+      <div style="background:rgba(240,253,244,.4);border-left:2px solid #bbf7d0">${mkSel(a.id,'civD', S.civile,     m.civD ||'')}</div>
+      <div style="background:rgba(240,253,244,.25);border-left:1px solid #bbf7d0">${mkSel(a.id,'civC', S.civile,     m.civC ||'')}</div>
+      <div style="background:rgba(250,245,255,.4);border-left:2px solid #e9d5ff">${mkSel(a.id,'corpD',S.corporate,  m.corpD||'')}</div>
+      <div style="background:rgba(250,245,255,.25);border-left:1px solid #e9d5ff">${mkSel(a.id,'corpC',S.corporate,  m.corpC||'')}</div>
+      <div style="background:rgba(254,252,232,.4);border-left:2px solid #fde68a">${mkSel(a.id,'civ6D',S.civilistic,  m.civ6D||'')}</div>
+      <div style="background:rgba(254,252,232,.25);border-left:1px solid #fde68a">${mkSel(a.id,'civ6C',S.civilistic,  m.civ6C||'')}</div>
     </div>`;
   }).join('');
 }
@@ -1610,7 +1682,7 @@ function toggleDrop(uid,accountId,field) {
   if(_openDrop&&_openDrop!==uid){document.getElementById('drop_'+_openDrop)?.remove();}
   if(document.getElementById('drop_'+uid)){document.getElementById('drop_'+uid).remove();_openDrop=null;return;}
   _openDrop=uid;
-  const struct=(field==='civD'||field==='civC')?S.civile:S.corporate;
+  const struct=(field==='civD'||field==='civC')?S.civile:(field==='corpD'||field==='corpC')?S.corporate:S.civilistic;
   const wrap=document.getElementById('wrap_'+uid); if(!wrap) return;
   const drop=document.createElement('div');
   drop.className='sd'; drop.id='drop_'+uid;
@@ -1719,14 +1791,15 @@ function setMap(accountId,field,value) {
   const uid='sel_'+accountId+'_'+field;
   const wrap=document.getElementById('wrap_'+uid);
   if(wrap) {
-    const struct=(field==='civD'||field==='civC')?S.civile:S.corporate;
+    const struct=(field==='civD'||field==='civC')?S.civile:(field==='corpD'||field==='corpC')?S.corporate:S.civilistic;
     wrap.outerHTML=mkSel(accountId,field,struct,value);
   }
 }
 
 function clearMapping(which) {
-  const label  = which==='civ' ? 'Civile (Dare + Avere)' : 'Corporate (Dare + Avere)';
-  const fields = which==='civ' ? ['civD','civC'] : ['corpD','corpC'];
+  const labels = {civ:'Locale (Dare + Avere)', corp:'IFRS Corporate (Dare + Avere)', civ6:'VI Direttiva (Dare + Avere)'};
+  const label  = labels[which] || which;
+  const fields = which==='civ' ? ['civD','civC'] : which==='corp' ? ['corpD','corpC'] : ['civ6D','civ6C'];
   const count  = S.coa.filter(a => fields.some(f => S.mapping[a.id]?.[f])).length;
   if (count === 0) { alert('La mappatura ' + label + ' è già vuota.'); return; }
   if (!confirm(
@@ -1752,10 +1825,10 @@ function clearMapping(which) {
 }
 
 function expMapCSV() {
-  const rows=['ID Conto;Nome Conto;Civ Dare;Civ Avere;Corp Dare;Corp Avere'];
+  const rows=['ID Conto;Nome Conto;Locale Dare;Locale Avere;Corp Dare;Corp Avere;VI Dir Dare;VI Dir Avere'];
   S.coa.forEach(a=>{
     const m=S.mapping[a.id]||{};
-    rows.push([a.id,a.name,m.civD||'',m.civC||'',m.corpD||'',m.corpC||''].map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(';'));
+    rows.push([a.id,a.name,m.civD||'',m.civC||'',m.corpD||'',m.corpC||'',m.civ6D||'',m.civ6C||''].map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(';'));
   });
   const a=document.createElement('a');
   a.href='data:text/csv;charset=utf-8,\uFEFF'+encodeURIComponent(rows.join('\n'));
@@ -1786,16 +1859,27 @@ async function impMapCSV(inp) {
 // ══════════════════════════════════════════════════════════
 // REPORT
 // ══════════════════════════════════════════════════════════
-let rptType='civ';
+// rptView: 'ifrs-locale' | 'ifrs-corp' | 'civ-locale' | 'civ-dir6'
+let rptView='ifrs-locale';
 let rptMode='ytd';
 let rptPeriods=[];
 let rptExpand=true;
 let rptGroupQ=false;   // raggruppamento per quarter
 const rptCollapsed=new Set(); // IDs nodi collassati
 
-// Ricostruisce l'intera pagina report (solo alla prima apertura o cambio tipo)
+// Risolve i parametri (struct, mapKey, bils) per il view corrente
+function rptParams() {
+  const v = rptView;
+  if (v==='ifrs-locale') return {struct:S.civile,     mapKey:'civ',  bils:S.bilIFRS, label:'IFRS — Locale (Bil. Verifica)'};
+  if (v==='ifrs-corp')   return {struct:S.corporate,  mapKey:'corp', bils:S.bilIFRS, label:'IFRS — Corporate (Reporting Package)'};
+  if (v==='civ-locale')  return {struct:S.civile,     mapKey:'civ',  bils:S.bilCiv,  label:'Civilistico — Locale (Bil. Verifica)'};
+                         return {struct:S.civilistic, mapKey:'civ6', bils:S.bilCiv,  label:'Civilistico — VI Direttiva CEE'};
+}
+
+// Ricostruisce l'intera pagina report (solo alla prima apertura o cambio view)
 function rReport() {
-  const allP=S.bilanci.map(b=>b.period);
+  const {bils} = rptParams();
+  const allP=bils.map(b=>b.period);
   if(!rptPeriods.length&&allP.length) rptPeriods=[...allP];
 
   function grp(children) {
@@ -1810,8 +1894,10 @@ function rReport() {
       <div id="rpt-controls" style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
         <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
           ${grp(
-            tb('📊 Civile',   rptType==='civ',  "rptType='civ';rReport()")+
-            tb('🏢 Corporate',rptType==='corp', "rptType='corp';rReport()")
+            tb('🔵 IFRS Locale',  rptView==='ifrs-locale',"setView('ifrs-locale')","IFRS — Bilancio di Verifica")+
+            tb('🔷 IFRS Corp',    rptView==='ifrs-corp',  "setView('ifrs-corp')",  "IFRS — Reporting Package")+
+            tb('🟢 Civ Locale',   rptView==='civ-locale', "setView('civ-locale')", "Civilistico — Bilancio di Verifica")+
+            tb('📜 VI Direttiva', rptView==='civ-dir6',   "setView('civ-dir6')",   "Civilistico — VI Direttiva CEE")
           )}
           ${grp(
             tb('YTD',rptMode==='ytd',"setMode('ytd')","Saldo finale")+
@@ -1829,8 +1915,8 @@ function rReport() {
           <button class="btn btn-sm btn-off no-print" onclick="printBilancio()">🖨 Stampa</button>
         </div>
       </div>
-        ${S.bilanci.length===0
-        ?`<div class="alert warn" style="margin-top:10px">⚠ Nessun bilancio caricato. Vai su "Importa dati".</div>`
+        ${!allP.length
+        ?`<div class="alert warn" style="margin-top:10px">⚠ Nessun bilancio caricato per questo ledger. Vai su "Importa dati".</div>`
         :`<div class="print-header" style="margin-bottom:12px">
         <h2>Serom Medical Technology s.r.l.</h2>
         <p id="print-subtitle">Bilancio riclassificato</p>
@@ -1841,10 +1927,11 @@ function rReport() {
   rRptTable();
 }
 
+function setView(v)    { rptView=v; rptPeriods=[]; rReport(); } // reset periodi al cambio view
 function setMode(m)    { rptMode=m;    rUpdControls(); rRptTable(); }
 function toggleExpand(){ rptExpand=!rptExpand; rUpdControls(); rRptTable(); }
 function toggleGroupQ(){ rptGroupQ=!rptGroupQ; rUpdControls(); rRptTable(); }
-function selAllP()     { rptPeriods=[...S.bilanci.map(b=>b.period)]; rUpdControls(); rRptTable(); }
+function selAllP()     { const {bils}=rptParams(); rptPeriods=[...bils.map(b=>b.period)]; rUpdControls(); rRptTable(); }
 
 function togglePeriod(p) {
   if(rptPeriods.includes(p)) { if(rptPeriods.length===1) return; rptPeriods=rptPeriods.filter(x=>x!==p); }
@@ -1855,18 +1942,21 @@ function togglePeriod(p) {
 
 // Aggiorna solo i colori dei pulsanti senza ricostruire la pagina
 function rUpdControls() {
-  const allP=S.bilanci.map(b=>b.period);
+  const {bils} = rptParams();
+  const allP=bils.map(b=>b.period);
   document.querySelectorAll('#rpt-controls button').forEach(b=>{
-    const t=b.textContent.trim().replace(/[📊🏢]/g,'').trim();
+    const t=b.textContent.trim();
     let active=false;
-    if(t==='Civile'||t==='📊 Civile')   active=rptType==='civ';
-    else if(t==='Corporate'||t==='🏢 Corporate') active=rptType==='corp';
+    if(t.includes('IFRS Locale'))   active=rptView==='ifrs-locale';
+    else if(t.includes('IFRS Corp'))  active=rptView==='ifrs-corp';
+    else if(t.includes('Civ Locale')) active=rptView==='civ-locale';
+    else if(t.includes('VI Direttiva')) active=rptView==='civ-dir6';
     else if(t==='YTD')   active=rptMode==='ytd';
     else if(t==='PTD')   active=rptMode==='ptd';
     else if(t==='≡ Conti') active=rptExpand;
     else if(t==='📅 Quarter') active=rptGroupQ;
     else if(allP.includes(b.textContent.trim())) active=rptPeriods.includes(b.textContent.trim());
-    else return; // Tutti, CSV, Stampa — non toccare
+    else return;
     b.className='btn btn-sm '+(active?'btn-on':'btn-off');
   });
 }
@@ -1899,21 +1989,19 @@ function applyCollapse() {
 }
 
 function rRptTable() {
-  // Salva posizione scroll prima di ricostruire
   const _scr = document.getElementById('rpt-scroll');
   const _scrollTop  = _scr ? _scr.scrollTop  : 0;
   const _scrollLeft = _scr ? _scr.scrollLeft : 0;
-  const struct  = rptType==='civ' ? S.civile : S.corporate;
-  const mapKey  = rptType==='civ' ? 'civ' : 'corp';
-  const selBils = S.bilanci.filter(b=>rptPeriods.includes(b.period));
-  // Ultimo periodo per semaforo riconciliazione
-  const _lastP = S.bilanci.length ? S.bilanci[S.bilanci.length-1].period : null;
+  const {struct, mapKey, bils} = rptParams();
+  const selBils = bils.filter(b=>rptPeriods.includes(b.period));
+  // Ultimo periodo per semaforo riconciliazione (usa bilanci del view attivo)
+  const _lastP = bils.length ? bils[bils.length-1].period : null;
   function _reconLight(nid) {
     if (!_lastP) return '';
     const key = nid+'::'+ _lastP;
     const voci = S.recon[key];
     if (!voci || !voci.length) return ''; // nessuna voce = niente semaforo
-    const bilLast = S.bilanci.find(b=>b.period===_lastP);
+    const bilLast = bils.find(b=>b.period===_lastP);
     const saldo = bilLast ? getBalanceYTD(bilLast, nid) : 0;
     const tot = voci.reduce((s,v)=>s+(v.segno==='+'?1:-1)*(v.importo||0), 0);
     const inQ = Math.abs(saldo - tot) < 0.005;
@@ -1975,8 +2063,9 @@ function rRptTable() {
   if (!tbl) return;
 
   if (!struct.length) {
+    const {label} = rptParams();
     tbl.innerHTML=`<tr><td colspan="99" style="padding:28px;text-align:center;color:#a8a29e">
-      Struttura ${rptType==='civ'?'Civile':'Corporate'} non caricata — vai su Strutture.</td></tr>`;
+      Struttura per "${label}" non caricata — vai su Strutture.</td></tr>`;
     rRptKPI(struct,mapKey,selBils); return;
   }
   if (!selBils.length) {
@@ -2237,9 +2326,8 @@ function rRptKPI(struct, mapKey, selBils) {
 }
 
 function expRptCSV() {
-  const struct=rptType==='civ'?S.civile:S.corporate;
-  const mapKey=rptType==='civ'?'civ':'corp';
-  const selBils=S.bilanci.filter(b=>rptPeriods.includes(b.period));
+  const {struct, mapKey, bils} = rptParams();
+  const selBils=bils.filter(b=>rptPeriods.includes(b.period));
   const rows=[['Tipo','Nodo ID','Nodo Nome','Conto ID','Conto Nome','Periodo','Saldo'].join(';')];
   selBils.forEach(b=>{
     S.coa.forEach(a=>{
@@ -2250,23 +2338,187 @@ function expRptCSV() {
       const resolved=resolveNode(struct,raw); if(!resolved) return;
       const node=struct.find(n=>n.id===resolved); if(!node) return;
       const v=getBalance(b,a.id,rptMode);
-      if(v!==0) rows.push([rptType,node.id,node.name,a.id,a.name,b.period,v].map(x=>'"'+String(x||'').replace(/"/g,'""')+'"').join(';'));
+      if(v!==0) rows.push([rptView,node.id,node.name,a.id,a.name,b.period,v].map(x=>'"'+String(x||'').replace(/"/g,'""')+'"').join(';'));
     });
   });
   const a=document.createElement('a');
   a.href='data:text/csv;charset=utf-8,\uFEFF'+encodeURIComponent(rows.join('\n'));
-  a.download=`report_${rptType}_${rptMode}_${new Date().toISOString().slice(0,10)}.csv`;
+  a.download=`report_${rptView}_${rptMode}_${new Date().toISOString().slice(0,10)}.csv`;
   a.click();
 }
 
 
+// Cerca un bilancio in entrambi i ledger (usato da recon che non sa il ledger)
+function _findBil(period) {
+  return S.bilIFRS.find(b=>b.period===period) || S.bilCiv.find(b=>b.period===period) || null;
+}
+// Tutti i periodi da entrambi i ledger, deduplicati e ordinati
+function _allPeriods() {
+  const seen=new Set();
+  return [...S.bilIFRS,...S.bilCiv].filter(b=>{ if(seen.has(b.period)) return false; seen.add(b.period); return true; }).map(b=>b.period).sort();
+}
+
+// ══════════════════════════════════════════════════════════
+// RICLASSIFICHE
+// ══════════════════════════════════════════════════════════
+let riclassLedger = 'ifrs'; // 'ifrs' | 'civ'
+
+function rRiclass() {
+  const el = document.getElementById('pg-riclass'); if (!el) return;
+  const ledger = riclassLedger;
+  const rules  = ledger==='civ' ? (S.riclassCiv||[]) : (S.riclassIFRS||[]);
+  const struct  = ledger==='civ' ? S.civilistic : S.corporate; // struttura target principale
+  const structL = S.civile; // struttura locale (Bilancio di Verifica)
+  const ledgerLabel = ledger==='ifrs' ? '🔵 IFRS' : '🟢 Civilistico';
+
+  function ruleRow(r, i) {
+    const typeLabel = r.type==='account' ? '📋 Conto' : '🌿 Ramo';
+    const activeStyle = r.active!==false ? 'background:#f0fdf4;border:1px solid #bbf7d0' : 'background:#fafaf9;border:1px solid #e7e5e4;opacity:.6';
+    return `<div style="${activeStyle};border-radius:10px;padding:10px 14px;margin-bottom:8px;display:grid;grid-template-columns:auto 1fr 1fr auto auto;gap:8px;align-items:center">
+      <span style="font-size:11px;background:${r.type==='account'?'#eff6ff':'#f0fdf4'};color:${r.type==='account'?'#1e40af':'#15803d'};border:1px solid ${r.type==='account'?'#bfdbfe':'#bbf7d0'};border-radius:5px;padding:2px 7px;white-space:nowrap">${typeLabel}</span>
+      <div>
+        <div style="font-size:10px;color:#64748b;margin-bottom:2px">Origine</div>
+        <div style="font-family:monospace;font-size:12px;font-weight:600">${esc(r.source||'—')}</div>
+        ${r.sourceName?`<div style="font-size:10px;color:#78716c">${esc(r.sourceName)}</div>`:''}
+      </div>
+      <div>
+        <div style="font-size:10px;color:#64748b;margin-bottom:2px">→ Destinazione</div>
+        <div style="font-family:monospace;font-size:12px;font-weight:600;color:#7e22ce">${esc(r.target||'—')}</div>
+        ${r.targetName?`<div style="font-size:10px;color:#78716c">${esc(r.targetName)}</div>`:''}
+        ${r.note?`<div style="font-size:10px;color:#a8a29e;font-style:italic">${esc(r.note)}</div>`:''}
+      </div>
+      <button onclick="toggleRiclass('${ledger}',${i})" title="${r.active!==false?'Disattiva':'Attiva'}"
+        style="padding:3px 9px;border-radius:6px;font-size:11px;cursor:pointer;border:1px solid;${r.active!==false?'background:#f0fdf4;color:#15803d;border-color:#bbf7d0':'background:#fef2f2;color:#dc2626;border-color:#fecaca'}">
+        ${r.active!==false?'✓ Attiva':'✗ Off'}
+      </button>
+      <button onclick="delRiclass('${ledger}',${i})" style="padding:3px 7px;border-radius:6px;font-size:11px;cursor:pointer;background:#fff;color:#dc2626;border:1px solid #fecaca">🗑</button>
+    </div>`;
+  }
+
+  el.innerHTML = `
+    <div class="row">
+      <div><p class="h1">Riclassifiche</p>
+        <p class="sub">Regole di riclassificazione per conto o ramo di struttura — applicate a Report e Dashboard.</p>
+      </div>
+    </div>
+    <div style="display:flex;gap:6px;margin-bottom:14px;padding:4px;background:#f5f5f4;border-radius:9px;display:inline-flex">
+      <button class="btn${ledger==='ifrs'?' btn-pri':' btn-sec'}" onclick="riclassLedger='ifrs';rRiclass()">🔵 Ledger IFRS</button>
+      <button class="btn${ledger==='civ'?' btn-pri':' btn-sec'}" onclick="riclassLedger='civ';rRiclass()">🟢 Ledger Civilistico</button>
+    </div>
+
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-hd" style="justify-content:space-between">
+        <span>${ledgerLabel} — ${rules.length} regola/e</span>
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-sm btn-on" onclick="addRiclassForm('${ledger}','account')">+ Conto</button>
+          <button class="btn btn-sm" style="background:#f0fdf4;color:#166534;border:1px solid #bbf7d0" onclick="addRiclassForm('${ledger}','node')">+ Ramo</button>
+        </div>
+      </div>
+      <div id="riclass-form-area"></div>
+      <div style="padding:12px 16px">
+        ${rules.length===0
+          ? `<p style="color:#a8a29e;font-size:12px;text-align:center;padding:16px 0">Nessuna riclassifica per il ledger ${ledgerLabel}.<br>Usa i pulsanti sopra per aggiungere regole di riclassificazione di conto o di ramo di struttura.</p>`
+          : rules.map(ruleRow).join('')}
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-hd">ℹ Come funzionano le riclassifiche</div>
+      <div class="card-bd" style="font-size:12px;color:#64748b;line-height:1.7">
+        <p><b>Riclassifica di conto:</b> sposta il saldo di uno specifico conto analitico da un nodo di struttura a un altro, senza modificare il mapping permanente.</p>
+        <p style="margin-top:6px"><b>Riclassifica di ramo:</b> sposta tutti i conti appartenenti a un nodo (e ai suoi figli) verso un nodo destinatario diverso. Utile per riclassificare crediti/debiti tra breve e lungo termine.</p>
+        <p style="margin-top:6px"><b>Anno fiscale:</b> 01.04 → 31.03. Il calcolo PTD viene effettuato contro l'estrazione precedente disponibile, senza risalire prima dell'inizio dell'anno fiscale corrente.</p>
+      </div>
+    </div>
+  `;
+}
+
+function addRiclassForm(ledger, type) {
+  const el = document.getElementById('riclass-form-area'); if (!el) return;
+  const struct = S.civile; // per la ricerca conti/nodi
+  const coaOpts = S.coa.map(a=>`<option value="${esc(a.id)}">${esc(a.id)} — ${esc(a.name)}</option>`).join('');
+  const allStructs = [...S.civile, ...S.corporate, ...S.civilistic];
+  const structOpts = allStructs.map(n=>`<option value="${esc(n.id)}">${esc(n.id)} — ${esc(n.name)}</option>`).join('');
+  const isAccount = type==='account';
+  el.innerHTML = `
+    <div style="padding:12px 16px;background:#f8fafc;border-bottom:1px solid #e7e5e4">
+      <p style="font-size:12px;font-weight:600;margin-bottom:10px">Nuova riclassifica di ${isAccount?'conto':'ramo'}</p>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+        <div>
+          <label style="font-size:11px;font-weight:600;color:#64748b;display:block;margin-bottom:3px">${isAccount?'Conto origine':'Nodo origine (ramo)'}:</label>
+          <select id="rc-source" style="width:100%;font-size:12px">
+            <option value="">— seleziona —</option>
+            ${isAccount ? coaOpts : structOpts}
+          </select>
+        </div>
+        <div>
+          <label style="font-size:11px;font-weight:600;color:#64748b;display:block;margin-bottom:3px">Nodo destinazione:</label>
+          <select id="rc-target" style="width:100%;font-size:12px">
+            <option value="">— seleziona —</option>
+            ${structOpts}
+          </select>
+        </div>
+      </div>
+      <div style="margin-bottom:10px">
+        <label style="font-size:11px;font-weight:600;color:#64748b;display:block;margin-bottom:3px">Nota (opzionale):</label>
+        <input type="text" id="rc-note" placeholder="es. Crediti verso clienti riclassificati a lungo termine" style="width:100%;font-size:12px">
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button class="btn btn-sec btn-sm" onclick="document.getElementById('riclass-form-area').innerHTML=''">Annulla</button>
+        <button class="btn btn-pri btn-sm" onclick="saveRiclass('${ledger}','${type}')">Aggiungi riclassifica</button>
+      </div>
+    </div>`;
+}
+
+function saveRiclass(ledger, type) {
+  const source = document.getElementById('rc-source')?.value;
+  const target = document.getElementById('rc-target')?.value;
+  const note   = document.getElementById('rc-note')?.value||'';
+  if (!source||!target) { alert('Seleziona origine e destinazione.'); return; }
+  const allItems = type==='account' ? S.coa : [...S.civile,...S.corporate,...S.civilistic];
+  const sourceObj = allItems.find(x=>x.id===source);
+  const allStructs = [...S.civile,...S.corporate,...S.civilistic];
+  const targetObj  = allStructs.find(n=>n.id===target);
+  const rule = {
+    id: Date.now().toString(36),
+    type,
+    source,
+    sourceName: sourceObj?.name||'',
+    target,
+    targetName: targetObj?.name||'',
+    note,
+    active: true,
+  };
+  const key = ledger==='civ' ? 'riclassCiv' : 'riclassIFRS';
+  set(s=>({[key]:[...(s[key]||[]),rule]}));
+  rRiclass();
+}
+
+function toggleRiclass(ledger, i) {
+  const key = ledger==='civ' ? 'riclassCiv' : 'riclassIFRS';
+  const rules = [...(S[key]||[])];
+  rules[i] = {...rules[i], active: rules[i].active===false ? true : false};
+  set({[key]:rules});
+  rRiclass();
+}
+
+function delRiclass(ledger, i) {
+  if (!confirm('Eliminare questa riclassifica?')) return;
+  const key = ledger==='civ' ? 'riclassCiv' : 'riclassIFRS';
+  const rules = [...(S[key]||[])];
+  rules.splice(i,1);
+  set({[key]:rules});
+  rRiclass();
+}
+
+// ══════════════════════════════════════════════════════════
 // RICONCILIAZIONE
 let reconNodeId=null
 function rRecon(){
   const el=document.getElementById('pg-recon');if(!el)return;
-  const allP=S.bilanci.map(b=>b.period);
+  const allP=_allPeriods();
   reconPeriod=allP.length?allP[allP.length-1]:null; // sempre ultimo periodo
-  const bil=S.bilanci.find(b=>b.period===reconPeriod);
+  const bil=_findBil(reconPeriod);
 
   // Conti con saldo non zero nel periodo corrente (più il conto già selezionato)
   const contiAttivi=S.coa.filter(a=>{
@@ -2500,7 +2752,7 @@ document.addEventListener('paste', function(e) {
 let reconPeriod=null;
 // ── end rRecon helpers ──
 
-function goRecon(nId){reconNodeId=nId;reconPeriod=rptPeriods[rptPeriods.length-1]||(S.bilanci.length?S.bilanci[S.bilanci.length-1].period:null);page='recon';renderAll();}
+function goRecon(nId){reconNodeId=nId;const ap=_allPeriods();reconPeriod=rptPeriods[rptPeriods.length-1]||(ap.length?ap[ap.length-1]:null);page='recon';renderAll();}
 // Incolla voci dagli appunti (tab-separated da Excel)
 async function pasteReconVoci() {
   try {
@@ -2654,14 +2906,14 @@ async function importReconVoci(inp) {
 
 function addReconVoce(){const k=(reconNodeId||'')+'::'+reconPeriod;if(!S.recon[k])S.recon[k]=[];S.recon[k].push({desc:'',segno:'+',importo:0});save();rRecon();}
 function delReconVoce(i){const k=(reconNodeId||'')+'::'+reconPeriod;if(S.recon[k])S.recon[k].splice(i,1);save();rRecon();}
-function reconRefresh(){const k=(reconNodeId||'')+'::'+reconPeriod;const voci=S.recon[k]||[];const st=rptType==='civ'?S.civile:S.corporate;const mk=rptType==='civ'?'civ':'corp';const b=S.bilanci.find(x=>x.period===reconPeriod);const sd=b&&reconNodeId?getBalance(b,reconNodeId,rptMode):0;const tot=voci.reduce((s,v)=>s+(v.segno==='+'?1:-1)*N(v.importo),0);const sc=sd-tot;const q=Math.abs(sc)<0.005;const e1=document.getElementById('recon-tot'),e2=document.getElementById('recon-scarto');if(e1){e1.textContent=fmt(tot);e1.className=cn(tot);}if(e2){e2.textContent=q?'0,00':fmt(sc);e2.style.color=q?'#15803d':'#dc2626';}}
+function reconRefresh(){const k=(reconNodeId||'')+'::'+reconPeriod;const voci=S.recon[k]||[];const st=rptView.includes('corp')?S.corporate:rptView.includes('dir6')?S.civilistic:S.civile;const mk=rptView.includes('corp')?'corp':rptView.includes('dir6')?'civ6':'civ';const b=_findBil(reconPeriod);const sd=b&&reconNodeId?getBalance(b,reconNodeId,rptMode):0;const tot=voci.reduce((s,v)=>s+(v.segno==='+'?1:-1)*N(v.importo),0);const sc=sd-tot;const q=Math.abs(sc)<0.005;const e1=document.getElementById('recon-tot'),e2=document.getElementById('recon-scarto');if(e1){e1.textContent=fmt(tot);e1.className=cn(tot);}if(e2){e2.textContent=q?'0,00':fmt(sc);e2.style.color=q?'#15803d':'#dc2626';}}
 // ══════════════════════════════════════════════════════════
 // STAMPA
 // ══════════════════════════════════════════════════════════
 function printBilancio() {
-  // Aggiorna subtitle con periodo/tipo prima di stampare
+  const {label} = rptParams();
   const el = document.getElementById('print-subtitle');
-  if (el) el.textContent = 'Bilancio riclassificato ' + (rptType==='civ'?'Civile':'Corporate') + ' — ' + rptMode.toUpperCase();
+  if (el) el.textContent = 'Bilancio riclassificato — ' + label + ' — ' + rptMode.toUpperCase();
   window.print();
 }
 
@@ -2670,7 +2922,7 @@ function printRecon(all) {
   if (!all) {
     // Stampa riconciliazione corrente
     const conto = S.coa.find(a=>a.id===reconNodeId);
-    const bil = S.bilanci.find(b=>b.period===reconPeriod);
+    const bil = _findBil(reconPeriod);
     const key = (reconNodeId||'')+'::'+reconPeriod;
     const voci = S.recon[key]||[];
     const saldo = bil&&reconNodeId ? getBalanceYTD(bil,reconNodeId) : 0;
@@ -2696,7 +2948,7 @@ function printRecon(all) {
     const sections = keys.map(key=>{
       const [nId, period] = key.split('::');
       const conto = S.coa.find(a=>a.id===nId);
-      const bil = S.bilanci.find(b=>b.period===period);
+      const bil = _findBil(period);
       const voci = S.recon[key]||[];
       const saldo = bil&&nId ? getBalanceYTD(bil,nId) : 0;
       const tot = voci.reduce((s,v)=>s+(v.segno==='+'?1:-1)*N(v.importo),0);
@@ -2783,7 +3035,7 @@ renderAll();
 
 // ── Banner ripristino: solo se dati assenti dopo caricamento localStorage ──
 (function checkRestore() {
-  if (S.coa.length || S.bilanci.length || S.civile.length) return; // dati già presenti
+  if (S.coa.length || S.bilIFRS.length || S.bilCiv.length || S.civile.length) return; // dati già presenti
   const b = document.createElement('div');
   b.id = 'restore-banner';
   b.style.cssText = [
