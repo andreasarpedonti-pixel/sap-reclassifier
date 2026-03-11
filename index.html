@@ -742,7 +742,7 @@ function calcRiclassAdj(struct, mapping, mapKey, bil, mode, riclass) {
     while (cur && !visited.has(cur.id)) {
       visited.add(cur.id);
       result.push({nodeId: cur.id, delta});
-      cur = struct.find(n=>n.id===cur.parent);
+      cur = struct.find(n=>n.id===cur.parentId);
     }
   }
   return result;
