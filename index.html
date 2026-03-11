@@ -217,6 +217,8 @@ tr:hover{--row-bg:#f5f5f0!important}
 /* RIGA RICLASSIFICAZIONE NEL REPORT */
 .r-riclass>td{background:#fafff5;color:#444;font-size:10px;font-style:italic;border-bottom:none}
 .r-riclass:hover>td{background:#f0fdf4!important}
+.r-riclass-out>td{background:#fff9f5;color:#444;font-size:10px;font-style:italic;border-bottom:none}
+.r-riclass-out:hover>td{background:#fff3ea!important}
 .r-hidden{display:none!important}
 .r-has-kids>td:nth-child(2){cursor:pointer}
 .r-has-kids:hover>td{background:rgba(0,0,0,.02)!important}
@@ -2167,6 +2169,7 @@ function rRptTable() {
   function colRuleAmount(col, rule) {
     function amt(bil, mode) {
       if (rule.active === false) return 0;
+      if (rule.period && rule.period !== bil.period) return 0;
       if (rule.type === 'account') {
         const a = S.coa.find(x=>x.id===rule.source); if (!a) return 0;
         const bal = getBalance(bil, a.id, mode); if (bal === 0) return 0;
@@ -2238,6 +2241,9 @@ function rRptTable() {
     const codeSz    = lv===0?'12':lv===1?'11':'11';
     const valSz     = lv===0?'16':lv===1?'14':'13';
     const valFw     = lv===0?'800':lv===1?'600':'500';
+    // Nodi con formula pura divisione → valori in percentuale
+    const isPct = node.formula && /^\s*=?\s*[^+\-]+\/[^+\-]+\s*$/.test(node.formula);
+    const fmtBal = isPct ? v => v!==0 ? (v*100).toFixed(1).replace('.',',')+'%' : '—' : v => v!==0 ? fmt(v) : '—';
     const nodeRow = `<tr class="${cls}${hidden?' r-hidden':''}" data-nid="${esc(node.id)}" data-par="${esc(parentId||'')}"
         onclick="toggleCollapse('${esc(node.id)}')" style="cursor:${hasKids?'pointer':'default'}">
       <td style="padding-left:${pad}px;position:sticky;left:0;z-index:1;background:var(--row-bg,#fff)">
@@ -2246,7 +2252,7 @@ function rRptTable() {
         </span>
       </td>
       <td style="position:sticky;left:100px;z-index:1;background:var(--row-bg,#fff)">${esc(node.name)}</td>
-      ${bals.map(v=>`<td class="${cn(v)}" style="font-family:monospace;font-size:${valSz}px;font-weight:${valFw}">${v!==0?fmt(v):'—'}</td>`).join('')}
+      ${bals.map(v=>`<td class="${isPct?'':cn(v)}" style="font-family:monospace;font-size:${valSz}px;font-weight:${valFw}">${fmtBal(v)}</td>`).join('')}
       <td></td>
     </tr>`;
 
@@ -2283,7 +2289,28 @@ function rRptTable() {
       });
     }
 
-    // Righe visive delle riclassifiche in entrata su questo nodo
+    // Helper per cella note+riconciliazione (riusato per entrata e uscita)
+    function rcNoteCell(noteKey, reconId) {
+      const reconBtn = reconId
+        ? `<button title="Riconciliazione" onclick="event.stopPropagation();goRecon('${esc(reconId)}')"
+             style="background:none;border:none;cursor:pointer;font-size:13px;color:#bbb;padding:1px 4px;border-radius:3px"
+             onmouseenter="this.style.color='#3b82f6';this.style.background='#eff6ff'"
+             onmouseleave="this.style.color='#bbb';this.style.background='none'">⚖</button>
+           ${_reconLight(reconId)}`
+        : '';
+      return `<td style="padding:2px 6px;white-space:nowrap" onclick="event.stopPropagation()">
+        <span style="display:inline-flex;align-items:center;gap:4px">
+          <input type="text" value="${esc(S.notes[noteKey]||'')}"
+            oninput="S.notes['${esc(noteKey)}']=this.value;save()"
+            placeholder="nota…"
+            style="width:110px;font-size:10px;padding:2px 5px;border:1px solid #e2e8f0;border-radius:4px;background:transparent;color:#334155"
+            onfocus="this.style.borderColor='#3b82f6'" onblur="this.style.borderColor='#e2e8f0'">
+          ${reconBtn}
+        </span>
+      </td>`;
+    }
+
+    // Righe visive delle riclassifiche in entrata (destinazione = questo nodo)
     const riclassRows = [];
     for (const r of _riclass) {
       if (r.active === false) continue;
@@ -2292,45 +2319,63 @@ function rRptTable() {
       if (!rAmts.some(v=>v!==0)) continue;
       const hR = isColl || hidden;
       const noteKey = '__rc__' + (r.id || (r.source+'_'+r.target+'_'+(r.period||'')));
-      const reconBtn = r.type==='account'
-        ? `<button title="Riconciliazione" onclick="event.stopPropagation();goRecon('${esc(r.source)}')"
-             style="background:none;border:none;cursor:pointer;font-size:13px;color:#bbb;padding:1px 4px;border-radius:3px"
-             onmouseenter="this.style.color='#3b82f6';this.style.background='#eff6ff'"
-             onmouseleave="this.style.color='#bbb';this.style.background='none'">⚖</button>
-           ${_reconLight(r.source)}`
-        : '';
       riclassRows.push(`<tr class="r-riclass${hR?' r-hidden':''}" data-acc="1" data-par="${esc(node.id)}">
         <td style="padding-left:${pad+22}px;position:sticky;left:0;z-index:1;background:var(--row-bg,#fafff5)">
           <span style="font-size:10px;color:#aaa;margin-right:3px">${r.type==='account'?'📋':'🌿'}</span>
           <span style="font-family:monospace;font-size:10px;color:#888">${esc(r.source)}</span>
         </td>
-        <td style="font-size:11px;color:#666;font-style:italic;position:sticky;left:100px;z-index:1;background:var(--row-bg,#fafff5)">
+        <td style="font-size:11px;color:#555;font-style:italic;position:sticky;left:100px;z-index:1;background:var(--row-bg,#fafff5)">
           ↷ ${esc(r.sourceName||r.source)}${r.note?` <span style="color:#bbb;font-size:10px">(${esc(r.note)})</span>`:''}
         </td>
         ${rAmts.map(v=>`<td class="${cn(v)}" style="font-family:monospace;font-size:11px;font-style:italic">${v!==0?fmt(v):'—'}</td>`).join('')}
-        <td style="padding:2px 6px;white-space:nowrap" onclick="event.stopPropagation()">
-          <span style="display:inline-flex;align-items:center;gap:4px">
-            <input type="text" value="${esc(S.notes[noteKey]||'')}"
-              oninput="S.notes['${esc(noteKey)}']=this.value;save()"
-              placeholder="nota…"
-              style="width:110px;font-size:10px;padding:2px 5px;border:1px solid #e2e8f0;border-radius:4px;background:transparent;color:#334155"
-              onfocus="this.style.borderColor='#3b82f6'" onblur="this.style.borderColor='#e2e8f0'">
-            ${reconBtn}
-          </span>
+        ${rcNoteCell(noteKey, r.type==='account'?r.source:null)}
+      </tr>`);
+    }
+
+    // Righe visive delle riclassifiche in uscita (sorgente = questo nodo)
+    const riclassOutRows = [];
+    for (const r of _riclass) {
+      if (r.active === false) continue;
+      // Determina se questo nodo è il nodo sorgente della regola
+      let isSrc = false;
+      if (r.type === 'node') {
+        isSrc = resolveNode(struct, r.source) === node.id;
+      } else {
+        const m = S.mapping[r.source];
+        if (m) {
+          const sd = resolveNode(struct, m[kD]), sc = resolveNode(struct, m[kC]);
+          isSrc = sd === node.id || sc === node.id;
+        }
+      }
+      if (!isSrc) continue;
+      const rAmts = cols.map(c=>colRuleAmount(c,r));
+      if (!rAmts.some(v=>v!==0)) continue;
+      const hR = isColl || hidden;
+      const noteKey = '__rc_src__' + (r.id || (r.source+'_'+r.target+'_'+(r.period||'')));
+      const dstName = r.targetName || r.target;
+      riclassOutRows.push(`<tr class="r-riclass-out${hR?' r-hidden':''}" data-acc="1" data-par="${esc(node.id)}">
+        <td style="padding-left:${pad+22}px;position:sticky;left:0;z-index:1;background:var(--row-bg,#fff9f5)">
+          <span style="font-size:10px;color:#f59e0b;margin-right:3px">↗</span>
+          <span style="font-family:monospace;font-size:10px;color:#888">${esc(r.source)}</span>
         </td>
+        <td style="font-size:11px;color:#888;font-style:italic;position:sticky;left:100px;z-index:1;background:var(--row-bg,#fff9f5)">
+          → ${esc(dstName)}${r.note?` <span style="color:#bbb;font-size:10px">(${esc(r.note)})</span>`:''}
+        </td>
+        ${rAmts.map(v=>`<td class="${cn(-v)}" style="font-family:monospace;font-size:11px;font-style:italic">${v!==0?fmt(-v):'—'}</td>`).join('')}
+        ${rcNoteCell(noteKey, r.type==='account'?r.source:null)}
       </tr>`);
     }
 
     if(node.totEnd) {
-      // Figli prima, poi riga totale del nodo
       ch.forEach(c=>addNode(c,node.id));
       rows.push(nodeRow);
       accRowsHtml.forEach(r=>rows.push(r));
+      riclassOutRows.forEach(r=>rows.push(r));
       riclassRows.forEach(r=>rows.push(r));
     } else {
-      // Default: riga totale del nodo, poi figli
       rows.push(nodeRow);
       accRowsHtml.forEach(r=>rows.push(r));
+      riclassOutRows.forEach(r=>rows.push(r));
       riclassRows.forEach(r=>rows.push(r));
       ch.forEach(c=>addNode(c,node.id));
     }
@@ -2548,7 +2593,7 @@ function rRiclass() {
   const allP     = bils.map(b=>b.period);
   const ledgerLabel = ledger==='ifrs' ? '🔵 IFRS' : '🟢 Civilistico';
 
-  function balPreview(r) {
+  function balPreview(r, idx) {
     if (!r.period) return `<span style="font-size:10px;color:#e67e00">⚠ Nessun periodo assegnato — la regola si applica a tutti i periodi</span>`;
     const bil = bils.find(b=>b.period===r.period);
     if (!bil) return `<span style="font-size:10px;color:#c00">⚠ Bilancio per ${esc(r.period)} non caricato</span>`;
@@ -2558,18 +2603,37 @@ function rRiclass() {
     if (r.type==='account') {
       const a = S.coa.find(x=>x.id===r.source);
       if (!a) return `<span style="font-size:10px;color:#c00">⚠ Conto ${esc(r.source)} non trovato nel piano dei conti</span>`;
-      saldoPre = getBalanceYTD(bil, a.id);
-      if (saldoPre === 0) return `<span style="font-size:10px;color:#e67e00">⚠ Saldo YTD = 0 in ${esc(r.period)} — la riga non apparirà nel report</span>`;
-      moved = (r.amount != null && r.amount > 0) ? Math.sign(saldoPre)*Math.abs(r.amount) : saldoPre;
+      const rawYTD = getBalanceYTD(bil, a.id);
+      if (rawYTD === 0) return `<span style="font-size:10px;color:#e67e00">⚠ Saldo YTD = 0 in ${esc(r.period)} — la riga non apparirà nel report</span>`;
+      // Subtract amounts moved by previous rules on same source+period
+      let prevMoved = 0;
+      if (idx > 0) {
+        const prevRules = rules.slice(0, idx).filter(pr =>
+          pr.active !== false && pr.type === 'account' &&
+          pr.source === r.source && (pr.period === r.period || !pr.period)
+        );
+        for (const pr of prevRules) {
+          const pm = (pr.amount != null && pr.amount > 0) ? Math.sign(rawYTD)*Math.abs(pr.amount) : rawYTD;
+          prevMoved += pm;
+        }
+      }
+      saldoPre = rawYTD - prevMoved;
+      if (saldoPre === 0) return `<span style="font-size:10px;color:#e67e00">⚠ Saldo ante rettifica = 0 (le regole precedenti hanno già spostato tutto)</span>`;
+      moved = (r.amount != null && r.amount > 0) ? Math.sign(rawYTD)*Math.abs(r.amount) : saldoPre;
       saldoPost = saldoPre - moved;
       const m = S.mapping[a.id];
       const origNode = m ? (resolveNode(struct,m[kD])||resolveNode(struct,m[kC])) : null;
       const origLabel = origNode
         ? `<span style="font-size:10px;color:#666">Nodo attuale: <b>${esc(origNode)}</b></span>`
         : `<span style="font-size:10px;color:#e67e00">⚠ Conto non mappato su struttura ${ledger==='civ'?'Civilistico':'Corporate'}</span>`;
+      const prevLabel = prevMoved !== 0
+        ? `<span style="font-size:11px;color:#b45309">Già spostato: <b style="font-family:monospace">${fmt(prevMoved)}</b></span>`
+        : '';
       return `<div style="display:flex;flex-wrap:wrap;gap:14px;align-items:center">
         ${origLabel}
-        <span style="font-size:11px;color:#444">Saldo YTD: <b style="font-family:monospace">${fmt(saldoPre)}</b></span>
+        <span style="font-size:11px;color:#444">Saldo YTD: <b style="font-family:monospace">${fmt(rawYTD)}</b></span>
+        ${prevLabel}
+        <span style="font-size:11px;color:#444">Ante rettifica: <b style="font-family:monospace">${fmt(saldoPre)}</b></span>
         <span style="font-size:11px;color:#111">→ Spostamento: <b style="font-family:monospace">${fmt(moved)}</b></span>
         <span style="font-size:11px;color:${Math.abs(saldoPost)<0.01?'#15803d':'#555'}">Residuo: <b style="font-family:monospace">${fmt(saldoPost)}</b>${Math.abs(saldoPost)<0.01?' ✓':''}</span>
       </div>`;
@@ -2606,7 +2670,7 @@ function rRiclass() {
       </select>
     </div>`;
     return `<div style="${activeStyle};border-radius:8px;padding:10px 14px;margin-bottom:8px">
-      <div style="display:grid;grid-template-columns:auto 1fr 1fr auto auto;gap:8px;align-items:start">
+      <div style="display:grid;grid-template-columns:auto 1fr 1fr auto auto auto auto;gap:6px;align-items:start">
         <span style="font-size:11px;background:${r.type==='account'?'#eff6ff':'#f0fdf4'};color:${r.type==='account'?'#1e40af':'#15803d'};border:1px solid ${r.type==='account'?'#bfdbfe':'#bbf7d0'};border-radius:5px;padding:2px 7px;white-space:nowrap;margin-top:2px">${typeLabel}</span>
         <div>
           <div style="font-size:10px;color:#64748b;margin-bottom:2px">Origine</div>
@@ -2620,23 +2684,27 @@ function rRiclass() {
         </div>
         <button onclick="toggleRiclass('${ledger}',${i})"
           style="padding:3px 9px;border-radius:5px;font-size:11px;cursor:pointer;border:1px solid;${r.active!==false?'background:#f0fdf4;color:#15803d;border-color:#bbf7d0':'background:#fef2f2;color:#dc2626;border-color:#fecaca'}">
-          ${r.active!==false?'✓ Attiva':'✗ Off'}
+          ${r.active!==false?'✓':'✗'}
         </button>
-        <button onclick="delRiclass('${ledger}',${i})" style="padding:3px 7px;border-radius:5px;font-size:11px;cursor:pointer;background:#fff;color:#dc2626;border:1px solid #fecaca">🗑</button>
+        <button onclick="editRiclassInline('${ledger}',${i})" title="Modifica"
+          style="padding:3px 7px;border-radius:5px;font-size:11px;cursor:pointer;background:#f5f8ff;color:#1e40af;border:1px solid #bfdbfe">✏</button>
+        <button onclick="dupRiclass('${ledger}',${i})" title="Duplica"
+          style="padding:3px 7px;border-radius:5px;font-size:11px;cursor:pointer;background:#f5fff5;color:#15803d;border:1px solid #bbf7d0">⧉</button>
+        <button onclick="delRiclass('${ledger}',${i})" title="Elimina"
+          style="padding:3px 7px;border-radius:5px;font-size:11px;cursor:pointer;background:#fff;color:#dc2626;border:1px solid #fecaca">🗑</button>
       </div>
       <div style="margin-top:8px;padding-top:8px;border-top:1px solid rgba(0,0,0,.05);display:flex;align-items:center;gap:12px;flex-wrap:wrap">
         ${periodBadge}
         <div style="display:flex;align-items:center;gap:6px">
           <span style="font-size:11px;color:#555;font-weight:600">Importo:</span>
           ${amtLabel}
-          <button onclick="editRiclassAmount('${ledger}',${i},${r.amount!=null?r.amount:'null'})"
-            style="font-size:10px;padding:2px 7px;border-radius:4px;background:#eff6ff;color:#1e40af;border:1px solid #bfdbfe;cursor:pointer">✏</button>
         </div>
         ${r.note?`<span style="font-size:11px;color:#78716c;font-style:italic">📝 ${esc(r.note)}</span>`:''}
       </div>
       <div style="margin-top:8px;padding-top:8px;border-top:1px solid rgba(0,0,0,.05)">
-        ${balPreview(r)}
+        ${balPreview(r, i)}
       </div>
+      <div id="re-${i}"></div>
     </div>`;
   }
 
@@ -2820,6 +2888,109 @@ function editRiclassAmount(ledger, i, currentAmt) {
   if (raw === null) return; // cancelled
   const amount = (raw.trim() !== '' && parseFloat(raw) > 0) ? parseFloat(raw) : null;
   rules[i] = {...rules[i], amount};
+  set({[key]:rules});
+  rRiclass();
+}
+
+function editRiclassInline(ledger, i) {
+  const key = ledger==='civ' ? 'riclassCiv' : 'riclassIFRS';
+  const rules = S[key]||[];
+  const r = rules[i]; if (!r) return;
+  const el = document.getElementById('re-'+i); if (!el) return;
+  // Toggle: close if already open
+  if (el.innerHTML.trim()) { el.innerHTML=''; return; }
+  const bils = ledger==='civ' ? S.bilCiv : S.bilIFRS;
+  const allP = bils.map(b=>b.period);
+  const tgtStruct = ledger==='civ' ? S.civilistic : S.corporate;
+  const coaOpts = S.coa.map(a=>`<option value="${esc(a.id)}"${a.id===r.source?' selected':''}>${esc(a.id)} — ${esc(a.name)}</option>`).join('');
+  const srcStructOpts = [...(S.civile||[]),...(S.corporate||[]),...(S.civilistic||[])].map(n=>`<option value="${esc(n.id)}"${n.id===r.source?' selected':''}>${esc(n.id)} — ${esc(n.name)}</option>`).join('');
+  const tgtStructOpts = tgtStruct.map(n=>`<option value="${esc(n.id)}"${n.id===r.target?' selected':''}>${esc(n.id)} — ${esc(n.name)}</option>`).join('');
+  const periodOpts = allP.map(p=>`<option value="${esc(p)}"${p===r.period?' selected':''}>${esc(p)}</option>`).join('');
+  const isAccount = r.type==='account';
+  const uid = 're'+i;
+  function srchSel(id, opts, ph) {
+    return `<div>
+      <input type="text" placeholder="🔍 ${ph}" oninput="rcFilter(this,'${id}')"
+        style="width:100%;font-size:11px;padding:4px 7px;border:1px solid #d4d4d4;border-radius:4px 4px 0 0;border-bottom:none;outline:none">
+      <select id="${id}" size="6" style="width:100%;font-size:12px;border:1px solid #d4d4d4;border-radius:0 0 4px 4px;padding:2px">
+        <option value="">— seleziona —</option>
+        ${opts}
+      </select>
+    </div>`;
+  }
+  el.innerHTML = `
+    <div style="padding:12px 14px;background:#f8f8ff;border:1px solid #c7d2fe;border-radius:6px;margin-top:8px">
+      <p style="font-size:11px;font-weight:600;margin-bottom:10px;color:#3730a3">✏ Modifica riclassifica di ${isAccount?'conto':'ramo'}</p>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px">
+        <div>
+          <label style="font-size:11px;font-weight:600;color:#555;display:block;margin-bottom:4px">${isAccount?'Conto origine':'Nodo origine (ramo)'}:</label>
+          ${srchSel(uid+'-src', isAccount ? coaOpts : srcStructOpts, isAccount ? 'cerca conto...' : 'cerca nodo...')}
+        </div>
+        <div>
+          <label style="font-size:11px;font-weight:600;color:#555;display:block;margin-bottom:4px">Nodo destinazione:</label>
+          ${srchSel(uid+'-tgt', tgtStructOpts, 'cerca nodo destinazione...')}
+        </div>
+        <div>
+          <label style="font-size:11px;font-weight:600;color:#555;display:block;margin-bottom:4px">Periodo:</label>
+          ${allP.length
+            ? `<select id="${uid}-period" style="width:100%;font-size:12px;padding:5px 7px;border:1px solid #d4d4d4;border-radius:4px">
+                <option value="">— tutti i periodi —</option>
+                ${periodOpts}
+               </select>
+               <p style="font-size:10px;color:#888;margin-top:3px">Lascia vuoto per applicare a tutti i periodi.</p>`
+            : `<div style="font-size:11px;color:#c00;padding:6px 0">⚠ Nessun bilancio caricato</div>`
+          }
+          <div style="margin-top:8px">
+            <label style="font-size:11px;font-weight:600;color:#555;display:block;margin-bottom:4px">
+              Importo parziale <span style="font-weight:400;color:#aaa">(vuoto = tutto)</span>:
+            </label>
+            <div style="display:flex;align-items:center;gap:5px">
+              <input type="number" id="${uid}-amount" min="0" step="0.01" placeholder="intero saldo" value="${r.amount!=null?r.amount:''}"
+                style="flex:1;font-size:12px;font-family:monospace;text-align:right;padding:5px 7px;border:1px solid #d4d4d4;border-radius:4px">
+              <span style="font-size:11px;color:#888">€</span>
+            </div>
+          </div>
+          <div style="margin-top:8px">
+            <label style="font-size:11px;font-weight:600;color:#555;display:block;margin-bottom:4px">Nota:</label>
+            <input type="text" id="${uid}-note" placeholder="opzionale" value="${esc(r.note||'')}"
+              style="width:100%;font-size:12px;padding:5px 7px;border:1px solid #d4d4d4;border-radius:4px">
+          </div>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button class="btn btn-sec btn-sm" onclick="document.getElementById('re-${i}').innerHTML=''">Annulla</button>
+        <button class="btn btn-pri btn-sm" onclick="updateRiclass('${ledger}',${i})">Salva modifiche</button>
+      </div>
+    </div>`;
+}
+
+function updateRiclass(ledger, i) {
+  const key = ledger==='civ' ? 'riclassCiv' : 'riclassIFRS';
+  const rules = [...(S[key]||[])];
+  const r = rules[i]; if (!r) return;
+  const uid = 're'+i;
+  const source = document.getElementById(uid+'-src')?.value || r.source;
+  const target = document.getElementById(uid+'-tgt')?.value || r.target;
+  const periodRaw = document.getElementById(uid+'-period')?.value||'';
+  const period = periodRaw.trim() || null;
+  const amtRaw = document.getElementById(uid+'-amount')?.value||'';
+  const amount = (amtRaw && parseFloat(amtRaw) > 0) ? parseFloat(amtRaw) : null;
+  const note = document.getElementById(uid+'-note')?.value||'';
+  const allItems = r.type==='account' ? S.coa : [...(S.civile||[]),...(S.corporate||[]),...(S.civilistic||[])];
+  const sourceObj = allItems.find(x=>x.id===source);
+  const allStructs = [...(S.civile||[]),...(S.corporate||[]),...(S.civilistic||[])];
+  const targetObj  = allStructs.find(n=>n.id===target);
+  rules[i] = {...r, source, sourceName: sourceObj?.name||r.sourceName||'', target, targetName: targetObj?.name||r.targetName||'', period, amount, note};
+  set({[key]:rules});
+  rRiclass();
+}
+
+function dupRiclass(ledger, i) {
+  const key = ledger==='civ' ? 'riclassCiv' : 'riclassIFRS';
+  const rules = [...(S[key]||[])];
+  const r = rules[i]; if (!r) return;
+  const clone = {...r, id: Date.now().toString(36)};
+  rules.splice(i+1, 0, clone);
   set({[key]:rules});
   rRiclass();
 }
