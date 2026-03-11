@@ -694,6 +694,7 @@ function calcRiclassAdj(struct, mapping, mapKey, bil, mode, riclass) {
   }
   for (const r of riclass) {
     if (r.active === false) continue;
+    if (r.period && r.period !== bil.period) continue; // filtra per periodo
     if (r.type === 'account') {
       const a = S.coa.find(x=>x.id===r.source);
       if (!a) continue;
@@ -2533,45 +2534,44 @@ function rRiclass() {
   const allP     = bils.map(b=>b.period);
   const ledgerLabel = ledger==='ifrs' ? '🔵 IFRS' : '🟢 Civilistico';
 
-  // Normalizza il periodo selezionato
-  if (!riclassPeriod || !allP.includes(riclassPeriod)) riclassPeriod = allP.length ? allP[allP.length-1] : null;
-  const previewBil = bils.find(b=>b.period===riclassPeriod) || null;
-
   function balPreview(r) {
-    if (!previewBil) return `<span style="font-size:10px;color:#aaa">Nessun bilancio caricato per questo ledger</span>`;
-    let saldoPre, moved, saldoPost, srcNode;
+    if (!r.period) return `<span style="font-size:10px;color:#e67e00">⚠ Nessun periodo assegnato — la regola si applica a tutti i periodi</span>`;
+    const bil = bils.find(b=>b.period===r.period);
+    if (!bil) return `<span style="font-size:10px;color:#c00">⚠ Bilancio per ${esc(r.period)} non caricato</span>`;
+    const kD=mapKey==='civ6'?'civ6D':mapKey==='civ'?'civD':'corpD';
+    const kC=mapKey==='civ6'?'civ6C':mapKey==='civ'?'civC':'corpC';
+    let saldoPre, moved, saldoPost;
     if (r.type==='account') {
       const a = S.coa.find(x=>x.id===r.source);
       if (!a) return `<span style="font-size:10px;color:#c00">⚠ Conto ${esc(r.source)} non trovato nel piano dei conti</span>`;
-      saldoPre = getBalanceYTD(previewBil, a.id);
-      if (saldoPre === 0) return `<span style="font-size:10px;color:#e67e00">⚠ Saldo YTD = 0 nel periodo ${esc(riclassPeriod)} — la riga non appare nel report</span>`;
+      saldoPre = getBalanceYTD(bil, a.id);
+      if (saldoPre === 0) return `<span style="font-size:10px;color:#e67e00">⚠ Saldo YTD = 0 in ${esc(r.period)} — la riga non apparirà nel report</span>`;
       moved = (r.amount != null && r.amount > 0) ? Math.sign(saldoPre)*Math.abs(r.amount) : saldoPre;
       saldoPost = saldoPre - moved;
-      // Trova il nodo origine attuale dal mapping
-      const kD=mapKey==='civ6'?'civ6D':mapKey==='civ'?'civD':'corpD';
-      const kC=mapKey==='civ6'?'civ6C':mapKey==='civ'?'civC':'corpC';
       const m = S.mapping[a.id];
       const origNode = m ? (resolveNode(struct,m[kD])||resolveNode(struct,m[kC])) : null;
-      const origLabel = origNode ? `<span style="font-size:10px;color:#666">Nodo origine attuale: <b>${esc(origNode)}</b></span>` : `<span style="font-size:10px;color:#e67e00">⚠ Conto non mappato nella struttura ${esc(ledger==='civ'?'Civilistico':'Corporate')}</span>`;
+      const origLabel = origNode
+        ? `<span style="font-size:10px;color:#666">Nodo attuale: <b>${esc(origNode)}</b></span>`
+        : `<span style="font-size:10px;color:#e67e00">⚠ Conto non mappato su struttura ${ledger==='civ'?'Civilistico':'Corporate'}</span>`;
       return `<div style="display:flex;flex-wrap:wrap;gap:14px;align-items:center">
         ${origLabel}
-        <span style="font-size:11px;color:#444">Saldo YTD <b>${esc(riclassPeriod)}</b>: <b style="font-family:monospace">${fmt(saldoPre)}</b></span>
+        <span style="font-size:11px;color:#444">Saldo YTD: <b style="font-family:monospace">${fmt(saldoPre)}</b></span>
         <span style="font-size:11px;color:#111">→ Spostamento: <b style="font-family:monospace">${fmt(moved)}</b></span>
-        <span style="font-size:11px;color:${Math.abs(saldoPost)<0.01?'#15803d':'#555'}">Residuo nel conto: <b style="font-family:monospace">${fmt(saldoPost)}</b>${Math.abs(saldoPost)<0.01?' ✓':''}</span>
+        <span style="font-size:11px;color:${Math.abs(saldoPost)<0.01?'#15803d':'#555'}">Residuo: <b style="font-family:monospace">${fmt(saldoPost)}</b>${Math.abs(saldoPost)<0.01?' ✓':''}</span>
       </div>`;
     } else {
-      srcNode = resolveNode(struct, r.source);
+      const srcNode = resolveNode(struct, r.source);
       if (!srcNode) return `<span style="font-size:10px;color:#c00">⚠ Nodo ${esc(r.source)} non trovato nella struttura</span>`;
       const saved = _currentRiclassAdj; _currentRiclassAdj = null;
-      saldoPre = nodeTotal(struct, S.mapping, mapKey, previewBil, srcNode, 'ytd');
+      saldoPre = nodeTotal(struct, S.mapping, mapKey, bil, srcNode, 'ytd');
       _currentRiclassAdj = saved;
-      if (saldoPre === 0) return `<span style="font-size:10px;color:#e67e00">⚠ Totale ramo = 0 nel periodo ${esc(riclassPeriod)} — la riga non appare nel report</span>`;
+      if (saldoPre === 0) return `<span style="font-size:10px;color:#e67e00">⚠ Totale ramo = 0 in ${esc(r.period)} — la riga non apparirà nel report</span>`;
       moved = (r.amount != null && r.amount > 0) ? Math.sign(saldoPre)*Math.abs(r.amount) : saldoPre;
       saldoPost = saldoPre - moved;
       return `<div style="display:flex;flex-wrap:wrap;gap:14px;align-items:center">
-        <span style="font-size:11px;color:#444">Totale ramo YTD <b>${esc(riclassPeriod)}</b>: <b style="font-family:monospace">${fmt(saldoPre)}</b></span>
+        <span style="font-size:11px;color:#444">Totale ramo YTD: <b style="font-family:monospace">${fmt(saldoPre)}</b></span>
         <span style="font-size:11px;color:#111">→ Spostamento: <b style="font-family:monospace">${fmt(moved)}</b></span>
-        <span style="font-size:11px;color:${Math.abs(saldoPost)<0.01?'#15803d':'#555'}">Residuo nel ramo: <b style="font-family:monospace">${fmt(saldoPost)}</b>${Math.abs(saldoPost)<0.01?' ✓':''}</span>
+        <span style="font-size:11px;color:${Math.abs(saldoPost)<0.01?'#15803d':'#555'}">Residuo: <b style="font-family:monospace">${fmt(saldoPost)}</b>${Math.abs(saldoPost)<0.01?' ✓':''}</span>
       </div>`;
     }
   }
@@ -2580,9 +2580,18 @@ function rRiclass() {
     const typeLabel = r.type==='account' ? '📋 Conto' : '🌿 Ramo';
     const activeStyle = r.active!==false ? 'background:#f0fdf4;border:1px solid #bbf7d0' : 'background:#fafaf9;border:1px solid #e7e5e4;opacity:.6';
     const amtLabel = (r.amount != null && r.amount > 0)
-      ? `<span style="font-size:10px;background:#fefce8;color:#854d0e;border:1px solid #fde68a;border-radius:4px;padding:1px 6px;margin-left:4px">✂ ${fmt(r.amount)}</span>`
-      : `<span style="font-size:10px;color:#a8a29e;margin-left:4px">intero saldo</span>`;
-    return `<div style="${activeStyle};border-radius:10px;padding:10px 14px;margin-bottom:8px">
+      ? `<span style="font-size:10px;background:#fefce8;color:#854d0e;border:1px solid #fde68a;border-radius:4px;padding:1px 6px">✂ ${fmt(r.amount)}</span>`
+      : `<span style="font-size:10px;color:#a8a29e">intero saldo</span>`;
+    const periodOpts = allP.map(p=>`<option value="${esc(p)}"${p===r.period?' selected':''}>${esc(p)}</option>`).join('');
+    const periodBadge = `<div style="display:flex;align-items:center;gap:5px">
+      <span style="font-size:10px;color:#666;font-weight:600">Periodo:</span>
+      <select style="font-size:11px;padding:2px 5px;border:1px solid #d4d4d4;border-radius:4px;background:#fff"
+        onchange="editRiclassPeriod('${ledger}',${i},this.value)">
+        <option value="">— tutti —</option>
+        ${periodOpts}
+      </select>
+    </div>`;
+    return `<div style="${activeStyle};border-radius:8px;padding:10px 14px;margin-bottom:8px">
       <div style="display:grid;grid-template-columns:auto 1fr 1fr auto auto;gap:8px;align-items:start">
         <span style="font-size:11px;background:${r.type==='account'?'#eff6ff':'#f0fdf4'};color:${r.type==='account'?'#1e40af':'#15803d'};border:1px solid ${r.type==='account'?'#bfdbfe':'#bbf7d0'};border-radius:5px;padding:2px 7px;white-space:nowrap;margin-top:2px">${typeLabel}</span>
         <div>
@@ -2595,18 +2604,19 @@ function rRiclass() {
           <div style="font-family:monospace;font-size:12px;font-weight:600;color:#7e22ce">${esc(r.target||'—')}</div>
           ${r.targetName?`<div style="font-size:10px;color:#78716c">${esc(r.targetName)}</div>`:''}
         </div>
-        <button onclick="toggleRiclass('${ledger}',${i})" title="${r.active!==false?'Disattiva':'Attiva'}"
-          style="padding:3px 9px;border-radius:6px;font-size:11px;cursor:pointer;border:1px solid;${r.active!==false?'background:#f0fdf4;color:#15803d;border-color:#bbf7d0':'background:#fef2f2;color:#dc2626;border-color:#fecaca'}">
+        <button onclick="toggleRiclass('${ledger}',${i})"
+          style="padding:3px 9px;border-radius:5px;font-size:11px;cursor:pointer;border:1px solid;${r.active!==false?'background:#f0fdf4;color:#15803d;border-color:#bbf7d0':'background:#fef2f2;color:#dc2626;border-color:#fecaca'}">
           ${r.active!==false?'✓ Attiva':'✗ Off'}
         </button>
-        <button onclick="delRiclass('${ledger}',${i})" style="padding:3px 7px;border-radius:6px;font-size:11px;cursor:pointer;background:#fff;color:#dc2626;border:1px solid #fecaca">🗑</button>
+        <button onclick="delRiclass('${ledger}',${i})" style="padding:3px 7px;border-radius:5px;font-size:11px;cursor:pointer;background:#fff;color:#dc2626;border:1px solid #fecaca">🗑</button>
       </div>
-      <div style="margin-top:8px;padding-top:8px;border-top:1px solid rgba(0,0,0,.05);display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <div style="margin-top:8px;padding-top:8px;border-top:1px solid rgba(0,0,0,.05);display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+        ${periodBadge}
         <div style="display:flex;align-items:center;gap:6px">
-          <span style="font-size:11px;color:#64748b;font-weight:600">Importo:</span>
+          <span style="font-size:11px;color:#555;font-weight:600">Importo:</span>
           ${amtLabel}
           <button onclick="editRiclassAmount('${ledger}',${i},${r.amount!=null?r.amount:'null'})"
-            style="font-size:10px;padding:2px 7px;border-radius:5px;background:#eff6ff;color:#1e40af;border:1px solid #bfdbfe;cursor:pointer">✏ Modifica</button>
+            style="font-size:10px;padding:2px 7px;border-radius:4px;background:#eff6ff;color:#1e40af;border:1px solid #bfdbfe;cursor:pointer">✏</button>
         </div>
         ${r.note?`<span style="font-size:11px;color:#78716c;font-style:italic">📝 ${esc(r.note)}</span>`:''}
       </div>
@@ -2616,27 +2626,16 @@ function rRiclass() {
     </div>`;
   }
 
-  const periodSelect = allP.length
-    ? `<div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;padding:8px 12px;background:#f5f5f5;border:1px solid #e8e8e8;border-radius:6px;font-size:12px">
-        <span style="color:#666;font-weight:600">Periodo di verifica:</span>
-        <select style="width:auto;font-size:12px;padding:4px 8px" onchange="riclassPeriod=this.value;rRiclass()">
-          ${allP.map(p=>`<option value="${esc(p)}"${p===riclassPeriod?' selected':''}>${esc(p)}</option>`).join('')}
-        </select>
-        <span style="color:#888;font-size:11px">— i saldi mostrati sotto sono YTD per il periodo selezionato</span>
-      </div>`
-    : `<div class="alert warn" style="margin-bottom:14px">Nessun bilancio caricato per il ledger ${ledgerLabel}. Importa prima i dati.</div>`;
-
   el.innerHTML = `
     <div class="row">
       <div><p class="h1">Riclassifiche</p>
-        <p class="sub">Regole di riclassificazione per conto o ramo di struttura — applicate a Report e Dashboard.</p>
+        <p class="sub">Ogni regola è associata a un periodo specifico e viene applicata solo al bilancio di quel mese.</p>
       </div>
     </div>
     <div style="display:flex;gap:6px;margin-bottom:14px;padding:4px;background:#f5f5f4;border-radius:9px;display:inline-flex">
-      <button class="btn${ledger==='ifrs'?' btn-pri':' btn-sec'}" onclick="riclassLedger='ifrs';riclassPeriod=null;rRiclass()">🔵 Ledger IFRS</button>
-      <button class="btn${ledger==='civ'?' btn-pri':' btn-sec'}" onclick="riclassLedger='civ';riclassPeriod=null;rRiclass()">🟢 Ledger Civilistico</button>
+      <button class="btn${ledger==='ifrs'?' btn-pri':' btn-sec'}" onclick="riclassLedger='ifrs';rRiclass()">🔵 Ledger IFRS</button>
+      <button class="btn${ledger==='civ'?' btn-pri':' btn-sec'}" onclick="riclassLedger='civ';rRiclass()">🟢 Ledger Civilistico</button>
     </div>
-    ${periodSelect}
     <div class="card" style="margin-bottom:16px">
       <div class="card-hd" style="justify-content:space-between">
         <span>${ledgerLabel} — ${rules.length} regola/e</span>
@@ -2648,17 +2647,17 @@ function rRiclass() {
       <div id="riclass-form-area"></div>
       <div style="padding:12px 16px">
         ${rules.length===0
-          ? `<p style="color:#a8a29e;font-size:12px;text-align:center;padding:16px 0">Nessuna riclassifica per il ledger ${ledgerLabel}.<br>Usa i pulsanti sopra per aggiungere regole di riclassificazione di conto o di ramo di struttura.</p>`
+          ? `<p style="color:#a8a29e;font-size:12px;text-align:center;padding:16px 0">Nessuna riclassifica per il ledger ${ledgerLabel}. Usa i pulsanti sopra per aggiungere regole.</p>`
           : rules.map(ruleRow).join('')}
       </div>
     </div>
     <div class="card">
       <div class="card-hd">ℹ Come funzionano le riclassifiche</div>
       <div class="card-bd" style="font-size:12px;color:#64748b;line-height:1.7">
-        <p><b>Riclassifica di conto:</b> sposta il saldo di uno specifico conto analitico da un nodo di struttura a un altro, senza modificare il mapping permanente.</p>
-        <p style="margin-top:6px"><b>Riclassifica di ramo:</b> sposta tutti i conti appartenenti a un nodo (e ai suoi figli) verso un nodo destinatario diverso. Utile per riclassificare crediti/debiti tra breve e lungo termine.</p>
-        <p style="margin-top:6px"><b>Anno fiscale:</b> 01.04 → 31.03. Il calcolo PTD viene effettuato contro l'estrazione precedente disponibile, senza risalire prima dell'inizio dell'anno fiscale corrente.</p>
-        <p style="margin-top:6px"><b>Nota:</b> se il saldo del conto/ramo è 0 per il periodo selezionato, la riga <b>non apparirà nel report</b>. Verificare che il conto sia presente nel bilancio del ledger corretto.</p>
+        <p><b>Riclassifica di conto:</b> sposta il saldo di uno specifico conto analitico da un nodo a un altro, senza modificare il mapping permanente.</p>
+        <p style="margin-top:6px"><b>Riclassifica di ramo:</b> sposta tutti i conti di un nodo (e figli) verso un nodo destinatario diverso.</p>
+        <p style="margin-top:6px"><b>Periodo:</b> ogni regola si applica solo al bilancio del mese selezionato. Se lasci "— tutti —" la regola vale per ogni periodo (utile per regole strutturali permanenti).</p>
+        <p style="margin-top:6px"><b>Nota:</b> se il saldo è 0 nel periodo assegnato, la riga non apparirà nel report. Il preview qui sotto ogni regola mostra il saldo effettivo.</p>
       </div>
     </div>
   `;
@@ -2666,45 +2665,61 @@ function rRiclass() {
 
 function addRiclassForm(ledger, type) {
   const el = document.getElementById('riclass-form-area'); if (!el) return;
-  const struct = S.civile; // per la ricerca conti/nodi
+  const bils = ledger==='civ' ? S.bilCiv : S.bilIFRS;
+  const allP = bils.map(b=>b.period);
+  const tgtStruct = ledger==='civ' ? S.civilistic : S.corporate;
   const coaOpts = S.coa.map(a=>`<option value="${esc(a.id)}">${esc(a.id)} — ${esc(a.name)}</option>`).join('');
-  const allStructs = [...S.civile, ...S.corporate, ...S.civilistic];
-  const structOpts = allStructs.map(n=>`<option value="${esc(n.id)}">${esc(n.id)} — ${esc(n.name)}</option>`).join('');
+  const srcStructOpts = [...S.civile,...S.corporate,...S.civilistic].map(n=>`<option value="${esc(n.id)}">${esc(n.id)} — ${esc(n.name)}</option>`).join('');
+  const tgtStructOpts = tgtStruct.map(n=>`<option value="${esc(n.id)}">${esc(n.id)} — ${esc(n.name)}</option>`).join('');
   const isAccount = type==='account';
+  const periodOpts = allP.map(p=>`<option value="${esc(p)}">${esc(p)}</option>`).join('');
+  // Helper per dropdown ricercabile: input filter + select size
+  function srchSel(id, opts, ph) {
+    return `<div>
+      <input type="text" placeholder="🔍 ${ph}" oninput="rcFilter(this,'${id}')"
+        style="width:100%;font-size:11px;padding:4px 7px;border:1px solid #d4d4d4;border-radius:4px 4px 0 0;border-bottom:none;outline:none">
+      <select id="${id}" size="6" style="width:100%;font-size:12px;border:1px solid #d4d4d4;border-radius:0 0 4px 4px;padding:2px">
+        <option value="">— seleziona —</option>
+        ${opts}
+      </select>
+    </div>`;
+  }
   el.innerHTML = `
-    <div style="padding:12px 16px;background:#f8fafc;border-bottom:1px solid #e7e5e4">
-      <p style="font-size:12px;font-weight:600;margin-bottom:10px">Nuova riclassifica di ${isAccount?'conto':'ramo'}</p>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+    <div style="padding:12px 16px;background:#fafafa;border-bottom:1px solid #e8e8e8">
+      <p style="font-size:12px;font-weight:600;margin-bottom:12px">Nuova riclassifica di ${isAccount?'conto':'ramo'}</p>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px">
         <div>
-          <label style="font-size:11px;font-weight:600;color:#64748b;display:block;margin-bottom:3px">${isAccount?'Conto origine':'Nodo origine (ramo)'}:</label>
-          <select id="rc-source" style="width:100%;font-size:12px">
-            <option value="">— seleziona —</option>
-            ${isAccount ? coaOpts : structOpts}
-          </select>
+          <label style="font-size:11px;font-weight:600;color:#555;display:block;margin-bottom:4px">${isAccount?'Conto origine':'Nodo origine (ramo)'}:</label>
+          ${srchSel('rc-source', isAccount ? coaOpts : srcStructOpts, isAccount ? 'cerca conto...' : 'cerca nodo...')}
         </div>
         <div>
-          <label style="font-size:11px;font-weight:600;color:#64748b;display:block;margin-bottom:3px">Nodo destinazione:</label>
-          <select id="rc-target" style="width:100%;font-size:12px">
-            <option value="">— seleziona —</option>
-            ${structOpts}
-          </select>
+          <label style="font-size:11px;font-weight:600;color:#555;display:block;margin-bottom:4px">Nodo destinazione:</label>
+          ${srchSel('rc-target', tgtStructOpts, 'cerca nodo destinazione...')}
         </div>
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
         <div>
-          <label style="font-size:11px;font-weight:600;color:#64748b;display:block;margin-bottom:3px">
-            Importo parziale <span style="font-weight:400;color:#a8a29e">(lascia vuoto = sposta l'intero saldo)</span>:
-          </label>
-          <div style="display:flex;align-items:center;gap:6px">
-            <input type="number" id="rc-amount" min="0" step="0.01" placeholder="0,00 (tutto)"
-              style="flex:1;font-size:12px;font-family:monospace;text-align:right">
-            <span style="font-size:11px;color:#78716c">€</span>
+          <label style="font-size:11px;font-weight:600;color:#555;display:block;margin-bottom:4px">Periodo:</label>
+          ${allP.length
+            ? `<select id="rc-period" style="width:100%;font-size:12px;padding:5px 7px">
+                <option value="">— tutti i periodi —</option>
+                ${periodOpts}
+               </select>
+               <p style="font-size:10px;color:#888;margin-top:3px">Lascia vuoto per applicare a tutti i periodi.</p>`
+            : `<div style="font-size:11px;color:#c00;padding:6px 0">⚠ Nessun bilancio caricato</div>`
+          }
+          <div style="margin-top:8px">
+            <label style="font-size:11px;font-weight:600;color:#555;display:block;margin-bottom:4px">
+              Importo parziale <span style="font-weight:400;color:#aaa">(vuoto = tutto)</span>:
+            </label>
+            <div style="display:flex;align-items:center;gap:5px">
+              <input type="number" id="rc-amount" min="0" step="0.01" placeholder="intero saldo"
+                style="flex:1;font-size:12px;font-family:monospace;text-align:right;padding:5px 7px;border:1px solid #d4d4d4;border-radius:4px">
+              <span style="font-size:11px;color:#888">€</span>
+            </div>
           </div>
-          <p style="font-size:10px;color:#a8a29e;margin-top:3px">Il valore si intende in valore assoluto; il segno segue il saldo del periodo.</p>
-        </div>
-        <div>
-          <label style="font-size:11px;font-weight:600;color:#64748b;display:block;margin-bottom:3px">Nota (opzionale):</label>
-          <input type="text" id="rc-note" placeholder="es. Crediti a lungo termine" style="width:100%;font-size:12px">
+          <div style="margin-top:8px">
+            <label style="font-size:11px;font-weight:600;color:#555;display:block;margin-bottom:4px">Nota:</label>
+            <input type="text" id="rc-note" placeholder="opzionale" style="width:100%;font-size:12px">
+          </div>
         </div>
       </div>
       <div style="display:flex;gap:8px;justify-content:flex-end">
@@ -2725,6 +2740,8 @@ function saveRiclass(ledger, type) {
   const sourceObj = allItems.find(x=>x.id===source);
   const allStructs = [...S.civile,...S.corporate,...S.civilistic];
   const targetObj  = allStructs.find(n=>n.id===target);
+  const periodRaw = document.getElementById('rc-period')?.value||'';
+  const period = periodRaw.trim() || null;
   const rule = {
     id: Date.now().toString(36),
     type,
@@ -2734,6 +2751,7 @@ function saveRiclass(ledger, type) {
     targetName: targetObj?.name||'',
     note,
     amount,
+    period,
     active: true,
   };
   const key = ledger==='civ' ? 'riclassCiv' : 'riclassIFRS';
@@ -2754,6 +2772,28 @@ function delRiclass(ledger, i) {
   const key = ledger==='civ' ? 'riclassCiv' : 'riclassIFRS';
   const rules = [...(S[key]||[])];
   rules.splice(i,1);
+  set({[key]:rules});
+  rRiclass();
+}
+
+// Filtra le opzioni di un <select> in base al testo cercato
+function rcFilter(inp, selId) {
+  const q = inp.value.toLowerCase().trim();
+  const sel = document.getElementById(selId); if (!sel) return;
+  let firstVisible = null;
+  Array.from(sel.options).forEach(o => {
+    const show = !q || o.value.toLowerCase().includes(q) || o.text.toLowerCase().includes(q);
+    o.style.display = show ? '' : 'none';
+    if (show && !firstVisible && o.value) firstVisible = o;
+  });
+  if (firstVisible) firstVisible.selected = true;
+}
+
+// Cambia il periodo di una regola esistente
+function editRiclassPeriod(ledger, i, newPeriod) {
+  const key = ledger==='civ' ? 'riclassCiv' : 'riclassIFRS';
+  const rules = [...(S[key]||[])];
+  rules[i] = {...rules[i], period: newPeriod||null};
   set({[key]:rules});
   rRiclass();
 }
