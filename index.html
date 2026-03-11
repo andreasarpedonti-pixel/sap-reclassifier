@@ -214,6 +214,9 @@ input:focus,select:focus{border-color:#111;box-shadow:0 0 0 2px rgba(0,0,0,.06)}
 .r-nod{--row-bg:#fff}
 .r-acc{--row-bg:#fafafa}
 tr:hover{--row-bg:#f5f5f0!important}
+/* RIGA RICLASSIFICAZIONE NEL REPORT */
+.r-riclass>td{background:#fafff5;color:#444;font-size:10px;font-style:italic;border-bottom:none}
+.r-riclass:hover>td{background:#f0fdf4!important}
 .r-hidden{display:none!important}
 .r-has-kids>td:nth-child(2){cursor:pointer}
 .r-has-kids:hover>td{background:rgba(0,0,0,.02)!important}
@@ -1999,7 +2002,7 @@ function rReport() {
           )}
           ${allP.length?grp(
             allP.map(p=>tb(esc(p),rptPeriods.includes(p),`togglePeriod('${esc(p)}')`)).join('')+
-            (allP.length>1?`<button class="btn btn-sm btn-off" onclick="selAllP()" title="Seleziona tutti">Tutti</button>`:'')
+            (allP.length>1?`<button class="btn btn-sm btn-off" onclick="selAllP()" title="Seleziona tutti">Tutti</button><button class="btn btn-sm btn-off" onclick="deselAllP()" title="Deseleziona tutti">Nessuno</button>`:'')
           ):''}
           ${grp(tb('≡ Conti',rptExpand,"toggleExpand()"))}
           ${grp(tb('📅 Quarter',rptGroupQ,"toggleGroupQ()","Aggrega per quarter fiscale (Q1=Apr-Giu, Q2=Lug-Set, Q3=Ott-Dic, Q4=Gen-Mar)"))}
@@ -2025,7 +2028,8 @@ function setView(v)    { rptView=v; rptPeriods=[]; rReport(); } // reset periodi
 function setMode(m)    { rptMode=m;    rUpdControls(); rRptTable(); }
 function toggleExpand(){ rptExpand=!rptExpand; rUpdControls(); rRptTable(); }
 function toggleGroupQ(){ rptGroupQ=!rptGroupQ; rUpdControls(); rRptTable(); }
-function selAllP()     { const {bils}=rptParams(); rptPeriods=[...bils.map(b=>b.period)]; rUpdControls(); rRptTable(); }
+function selAllP()   { const {bils}=rptParams(); rptPeriods=[...bils.map(b=>b.period)]; rUpdControls(); rRptTable(); }
+function deselAllP() { const {bils}=rptParams(); const all=bils.map(b=>b.period); rptPeriods=all.length?[all[all.length-1]]:rptPeriods; rUpdControls(); rRptTable(); }
 
 function togglePeriod(p) {
   if(rptPeriods.includes(p)) { if(rptPeriods.length===1) return; rptPeriods=rptPeriods.filter(x=>x!==p); }
@@ -2158,6 +2162,25 @@ function rRptTable() {
     const last=col.bils[col.bils.length-1];
     return getBalanceYTD(last,accountId);
   }
+  // Delta apportato da una singola regola di riclassifica su una colonna
+  function colRuleAmount(col, rule) {
+    function amt(bil, mode) {
+      if (rule.active === false) return 0;
+      if (rule.type === 'account') {
+        const a = S.coa.find(x=>x.id===rule.source); if (!a) return 0;
+        const bal = getBalance(bil, a.id, mode); if (bal === 0) return 0;
+        return (rule.amount != null && rule.amount > 0) ? Math.sign(bal)*Math.abs(rule.amount) : bal;
+      } else {
+        const srcNode = resolveNode(struct, rule.source); if (!srcNode) return 0;
+        const saved = _currentRiclassAdj; _currentRiclassAdj = null;
+        const tot = nodeTotal(struct, S.mapping, mapKey, bil, srcNode, mode);
+        _currentRiclassAdj = saved; if (tot === 0) return 0;
+        return (rule.amount != null && rule.amount > 0) ? Math.sign(tot)*Math.abs(rule.amount) : tot;
+      }
+    }
+    if (!col.isQ || rptMode==='ptd') return col.bils.reduce((s,b)=>s+amt(b,rptMode),0);
+    return amt(col.bils[col.bils.length-1],'ytd');
+  }
   if (!tbl) return;
 
   if (!struct.length) {
@@ -2259,15 +2282,41 @@ function rRptTable() {
       });
     }
 
+    // Righe visive delle riclassifiche in entrata su questo nodo
+    const riclassRows = [];
+    for (const r of _riclass) {
+      if (r.active === false) continue;
+      if (resolveNode(struct, r.target) !== node.id) continue;
+      const rAmts = cols.map(c=>colRuleAmount(c,r));
+      if (!rAmts.some(v=>v!==0)) continue;
+      const srcLabel = r.type==='account'
+        ? `${esc(r.source)}${r.sourceName?' — '+esc(r.sourceName):''}`
+        : `${esc(r.source)}${r.sourceName?' — '+esc(r.sourceName):''}`;
+      const hR = isColl || hidden;
+      riclassRows.push(`<tr class="r-riclass${hR?' r-hidden':''}" data-acc="1" data-par="${esc(node.id)}">
+        <td style="padding-left:${pad+22}px;position:sticky;left:0;z-index:1;background:var(--row-bg,#fafff5)">
+          <span style="font-size:10px;color:#aaa;margin-right:3px">${r.type==='account'?'📋':'🌿'}</span>
+          <span style="font-family:monospace;font-size:10px;color:#888">${r.type==='account'?esc(r.source):esc(r.source)}</span>
+        </td>
+        <td style="font-size:11px;color:#666;font-style:italic;position:sticky;left:100px;z-index:1;background:var(--row-bg,#fafff5)">
+          ↷ ${r.type==='account'?esc(r.sourceName||r.source):esc(r.sourceName||r.source)}${r.note?` <span style="color:#bbb;font-size:10px">(${esc(r.note)})</span>`:''}
+        </td>
+        ${rAmts.map(v=>`<td class="${cn(v)}" style="font-family:monospace;font-size:11px;font-style:italic">${v!==0?fmt(v):'—'}</td>`).join('')}
+        <td></td>
+      </tr>`);
+    }
+
     if(node.totEnd) {
       // Figli prima, poi riga totale del nodo
       ch.forEach(c=>addNode(c,node.id));
       rows.push(nodeRow);
       accRowsHtml.forEach(r=>rows.push(r));
+      riclassRows.forEach(r=>rows.push(r));
     } else {
       // Default: riga totale del nodo, poi figli
       rows.push(nodeRow);
       accRowsHtml.forEach(r=>rows.push(r));
+      riclassRows.forEach(r=>rows.push(r));
       ch.forEach(c=>addNode(c,node.id));
     }
   }
