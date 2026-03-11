@@ -742,7 +742,7 @@ function calcRiclassAdj(struct, mapping, mapKey, bil, mode, riclass) {
     while (cur && !visited.has(cur.id)) {
       visited.add(cur.id);
       result.push({nodeId: cur.id, delta});
-      cur = struct.find(n=>n.id===cur.parent);
+      cur = struct.find(n=>n.id===cur.parentId);
     }
   }
   return result;
@@ -1560,6 +1560,9 @@ function renderNode(key,struct,node,lv,col) {
       <span style="font-family:monospace;font-size:10px;color:#a8a29e;min-width:60px;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(node.id)}">${esc(node.id.length>14?node.id.slice(0,13)+'…':node.id)}</span>
       <span style="font-size:12px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(node.name)}</span>
       <div class="sa">
+        <button class="ib" title="${node.totEnd?'Totale in fondo (clicca per spostare in cima)':'Totale in cima (clicca per spostare in fondo)'}"
+          style="${node.totEnd?'color:#4f46e5;background:#eef2ff':''}"
+          onclick="event.stopPropagation();toggleTotEnd('${key}','${esc(node.id)}')">∑${node.totEnd?'↓':'↑'}</button>
         <button class="ib" title="Aggiungi figlio" onclick="addNodeChild('${key}','${esc(node.id)}')">➕</button>
         <button class="ib" title="Elimina" style="color:#dc2626" onclick="delNode('${key}','${esc(node.id)}')">🗑</button>
       </div>
@@ -1594,6 +1597,12 @@ function delNode(key,id) {
   const del=new Set([id]); let ch=true;
   while(ch){ch=false;orig.forEach(n=>{if(n.parentId&&del.has(n.parentId)&&!del.has(n.id)){del.add(n.id);ch=true;}});}
   _setStruct(key,orig.filter(n=>!del.has(n.id)));
+}
+function toggleTotEnd(key,id) {
+  const struct=[..._structByKey(key)];
+  const n=struct.find(x=>x.id===id); if(!n) return;
+  n.totEnd=!n.totEnd;
+  _setStruct(key,struct);
 }
 async function importStruct(key,inp) {
   const f=inp.files[0]; if(!f) return;
@@ -2205,7 +2214,7 @@ function rRptTable() {
     const codeSz    = lv===0?'12':lv===1?'11':'11';
     const valSz     = lv===0?'16':lv===1?'14':'13';
     const valFw     = lv===0?'800':lv===1?'600':'500';
-    rows.push(`<tr class="${cls}${hidden?' r-hidden':''}" data-nid="${esc(node.id)}" data-par="${esc(parentId||'')}"
+    const nodeRow = `<tr class="${cls}${hidden?' r-hidden':''}" data-nid="${esc(node.id)}" data-par="${esc(parentId||'')}"
         onclick="toggleCollapse('${esc(node.id)}')" style="cursor:${hasKids?'pointer':'default'}">
       <td style="padding-left:${pad}px;position:sticky;left:0;z-index:1;background:var(--row-bg,#fff)">
         <span style="display:inline-flex;align-items:center;gap:3px">
@@ -2215,9 +2224,10 @@ function rRptTable() {
       <td style="position:sticky;left:100px;z-index:1;background:var(--row-bg,#fff)">${esc(node.name)}</td>
       ${bals.map(v=>`<td class="${cn(v)}" style="font-family:monospace;font-size:${valSz}px;font-weight:${valFw}">${v!==0?fmt(v):'—'}</td>`).join('')}
       <td></td>
-    </tr>`);
+    </tr>`;
 
     // Conti diretti (se espanso)
+    const accRowsHtml = [];
     if(rptExpand) {
       S.coa.forEach(a=>{
         const m2=S.mapping[a.id]; if(!m2) return;
@@ -2227,7 +2237,7 @@ function rRptTable() {
         const aBals=cols.map(c=>colBalance(c,a.id));
         if(!aBals.some(v=>v!==0)) return;
         const hAcc = isColl || hidden;
-        rows.push(`<tr class="r-acc${hAcc?' r-hidden':''}" data-acc="1" data-par="${esc(node.id)}">
+        accRowsHtml.push(`<tr class="r-acc${hAcc?' r-hidden':''}" data-acc="1" data-par="${esc(node.id)}">
           <td style="padding-left:${pad+22}px;font-family:monospace;font-size:12px;color:#94a3b8;position:sticky;left:0;z-index:1;background:var(--row-bg,#fff)">${esc(a.id)}</td>
           <td style="font-size:12px;color:#64748b;position:sticky;left:100px;z-index:1;background:var(--row-bg,#fff)">${esc(a.name)}</td>
           ${aBals.map(v=>`<td class="${cn(v)}" style="font-family:monospace;font-size:12px">${v!==0?fmt(v):'—'}</td>`).join('')}
@@ -2249,7 +2259,17 @@ function rRptTable() {
       });
     }
 
-    ch.forEach(c=>addNode(c,node.id));
+    if(node.totEnd) {
+      // Figli prima, poi riga totale del nodo
+      ch.forEach(c=>addNode(c,node.id));
+      rows.push(nodeRow);
+      accRowsHtml.forEach(r=>rows.push(r));
+    } else {
+      // Default: riga totale del nodo, poi figli
+      rows.push(nodeRow);
+      accRowsHtml.forEach(r=>rows.push(r));
+      ch.forEach(c=>addNode(c,node.id));
+    }
   }
 
   function isAncestorCollapsed(pid) {
