@@ -1626,19 +1626,26 @@ function renderNode(key,struct,node,lv,col) {
   const tog = ch.length
     ? `<span onclick="event.stopPropagation();toggleSNode('${key}','${esc(node.id)}')" style="cursor:pointer;margin-right:3px;font-size:9px;color:${col}">${isExpanded?'▼':'▶'}</span>`
     : '<span style="display:inline-block;width:13px"></span>';
+  const hasFormula = !!node.formula;
+  const editId = 'sne-'+key+'-'+CSS.escape(node.id);
   return `<div class="sn">
     <div class="sr" style="padding-left:${lv*16+8}px">
       ${tog}
       <span style="font-family:monospace;font-size:10px;color:#a8a29e;min-width:60px;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(node.id)}">${esc(node.id.length>14?node.id.slice(0,13)+'…':node.id)}</span>
       <span style="font-size:12px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(node.name)}</span>
+      ${hasFormula?`<span title="Formula: ${esc(node.formula)}" style="font-size:9px;font-family:monospace;color:#7c3aed;background:#f5f3ff;border:1px solid #ddd6fe;border-radius:4px;padding:1px 5px;white-space:nowrap;max-width:120px;overflow:hidden;text-overflow:ellipsis">ƒ ${esc(node.formula)}</span>`:''}
       <div class="sa">
-        <button class="ib" title="${node.totEnd?'Totale in fondo (clicca per spostare in cima)':'Totale in cima (clicca per spostare in fondo)'}"
+        <button class="ib" title="${node.totEnd?'Totale in fondo':'Totale in cima'}"
           style="${node.totEnd?'color:#4f46e5;background:#eef2ff':''}"
           onclick="event.stopPropagation();toggleTotEnd('${key}','${esc(node.id)}')">∑${node.totEnd?'↓':'↑'}</button>
+        <button class="ib" title="Modifica nome / formula"
+          style="${hasFormula?'color:#7c3aed;background:#f5f3ff':''}"
+          onclick="event.stopPropagation();editSNode('${key}','${esc(node.id)}')">✏</button>
         <button class="ib" title="Aggiungi figlio" onclick="addNodeChild('${key}','${esc(node.id)}')">➕</button>
         <button class="ib" title="Elimina" style="color:#dc2626" onclick="delNode('${key}','${esc(node.id)}')">🗑</button>
       </div>
     </div>
+    <div id="${editId}" style="display:none;margin:0 8px 4px ${lv*16+8}px;padding:10px 12px;background:#fafafa;border:1px solid #e8e8e8;border-radius:6px;font-size:12px"></div>
     ${isExpanded?ch.map(c=>renderNode(key,struct,c,lv+1,col)).join(''):''}
   </div>`;
 }
@@ -1675,6 +1682,58 @@ function toggleTotEnd(key,id) {
   const n=struct.find(x=>x.id===id); if(!n) return;
   n.totEnd=!n.totEnd;
   _setStruct(key,struct);
+}
+
+function editSNode(key, id) {
+  const editId = 'sne-'+key+'-'+id;
+  const el = document.getElementById(editId); if (!el) return;
+  if (el.style.display !== 'none') { el.style.display='none'; return; }
+  const struct = _structByKey(key);
+  const node = struct.find(n=>n.id===id); if (!node) return;
+  // Nodi fratelli e cugini disponibili come riferimento formula
+  const others = struct.filter(n=>n.id!==id).map(n=>`<option value="${esc(n.id)}">${esc(n.id)} — ${esc(n.name)}</option>`).join('');
+  el.innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:8px">
+      <div>
+        <label style="font-size:10px;font-weight:600;color:#555;display:block;margin-bottom:3px">Nome voce</label>
+        <input id="${esc(editId)}-nm" type="text" value="${esc(node.name)}"
+          style="width:100%;font-size:12px;padding:5px 7px;border:1px solid #d4d4d4;border-radius:4px;box-sizing:border-box">
+      </div>
+      <div>
+        <label style="font-size:10px;font-weight:600;color:#555;display:block;margin-bottom:3px">
+          Formula subtotale <span style="font-weight:400;color:#a8a29e">(vuoto = somma automatica dei figli)</span>
+        </label>
+        <input id="${esc(editId)}-fo" type="text" value="${esc(node.formula||'')}"
+          placeholder="es: A + B - C  oppure  A / B"
+          style="width:100%;font-size:12px;font-family:monospace;padding:5px 7px;border:1px solid #d4d4d4;border-radius:4px;box-sizing:border-box">
+        <p style="font-size:10px;color:#a8a29e;margin-top:3px;line-height:1.5">
+          Usa gli <b>ID nodo</b> separati da <code>+</code> <code>-</code> (somma/differenza) o <code>/</code> (percentuale).<br>
+          Nodi disponibili:
+          <select size="1" onchange="document.getElementById('${esc(editId)}-fo').value+=(document.getElementById('${esc(editId)}-fo').value?' + ':'')+this.value;this.selectedIndex=0"
+            style="font-size:10px;padding:1px 3px;border:1px solid #d4d4d4;border-radius:3px;max-width:200px">
+            <option value="">— inserisci nodo —</option>
+            ${others}
+          </select>
+        </p>
+      </div>
+    </div>
+    <div style="display:flex;gap:6px;justify-content:flex-end">
+      <button class="btn btn-sec btn-sm" onclick="document.getElementById('${esc(editId)}').style.display='none'">Annulla</button>
+      <button class="btn btn-pri btn-sm" onclick="saveSNode('${key}','${esc(id)}')">Salva</button>
+    </div>`;
+  el.style.display = 'block';
+}
+
+function saveSNode(key, id) {
+  const editId = 'sne-'+key+'-'+id;
+  const nm = document.getElementById(editId+'-nm')?.value?.trim();
+  const fo = document.getElementById(editId+'-fo')?.value?.trim();
+  if (!nm) { alert('Il nome non può essere vuoto.'); return; }
+  const struct = [..._structByKey(key)];
+  const node = struct.find(n=>n.id===id); if (!node) return;
+  node.name = nm;
+  if (fo) node.formula = fo; else delete node.formula;
+  _setStruct(key, struct);
 }
 async function importStruct(key,inp) {
   const f=inp.files[0]; if(!f) return;
