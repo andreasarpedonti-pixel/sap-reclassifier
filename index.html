@@ -1734,6 +1734,7 @@ function saveSNode(key, id) {
   node.name = nm;
   if (fo) node.formula = fo; else delete node.formula;
   _setStruct(key, struct);
+  renderAll();
 }
 async function importStruct(key,inp) {
   const f=inp.files[0]; if(!f) return;
