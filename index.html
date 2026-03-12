@@ -1123,7 +1123,7 @@ function dashKPI() {
     return '<div style="background:'+d.bg+';border:1px solid '+d.border+';border-radius:12px;padding:12px 14px;min-width:160px;flex:1">'
       + '<p style="font-size:13px;font-weight:700;color:#334155;margin-bottom:10px">'
       + d.ic+' '+d.label
-      + (d.note?(()=>{const n=typeof d.note==='function'?d.note():d.note; return n?'<span style="font-size:9px;color:#a8a29e;margin-left:5px">'+n+'</span>':'';})()):'')
+      + (d.note?(()=>{const n=typeof d.note==='function'?d.note():d.note; return n?'<span style="font-size:9px;color:#a8a29e;margin-left:5px">'+n+'</span>':'';})():'')
       + '</p>'
       + rows
       + '</div>';
