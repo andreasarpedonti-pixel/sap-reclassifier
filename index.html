@@ -1039,9 +1039,58 @@ function dashKPI() {
     return utileNetto - tot63;
   }
 
+  function calcGrossProfit(b) {
+    // Cerca prima un nodo dedicato nella struttura
+    const nGP = fn('gross profit','margine lordo','margine commerciale','contributed margin','gross');
+    if (nGP) return nodeTotal(struct,S.mapping,mapKey,b,nGP.id,dashMode);
+    // Calcola: Ricavi − Costo del venduto
+    const nRev  = fn('4001','ricavi di vendita','ricavi netti','revenues');
+    const nCogs = fn('5001','5000','costo del venduto','costo beni venduti','cost of sales','costo delle merci vendute');
+    if (!nRev || !nCogs) return null;
+    const rev  = nodeTotal(struct,S.mapping,mapKey,b,nRev.id, dashMode);
+    const cogs = nodeTotal(struct,S.mapping,mapKey,b,nCogs.id,dashMode);
+    return rev + cogs; // COGS è dare (negativo) → somma = gross profit
+  }
+
+  function calcOperatingIncome(b) {
+    // Cerca prima un nodo dedicato nella struttura
+    const nOI = fn('ebit','operating income','risultato operativo','reddito operativo','utile operativo','operating profit','risultato della gestione');
+    if (nOI) return nodeTotal(struct,S.mapping,mapKey,b,nOI.id,dashMode);
+    // Calcola: GP − Spese operative
+    const gp = calcGrossProfit(b); if (gp === null) return null;
+    const nOpex = fn('opex','spese operative','costi operativi','operating expenses','costi generali','sg&a');
+    if (!nOpex) return null;
+    const opex = nodeTotal(struct,S.mapping,mapKey,b,nOpex.id,dashMode);
+    return gp + opex; // spese operative in dare (negative) → somma = OI
+  }
+
+  // Calcola GP% e OI% rispetto al fatturato (per le note nelle card)
+  function gpPct(bils2) {
+    const nRev = fn('4001','ricavi di vendita','ricavi netti','revenues');
+    if (!nRev) return null;
+    const last = bils2[bils2.length-1];
+    const rev = nodeTotal(struct,S.mapping,mapKey,last,nRev.id,dashMode);
+    const gp  = calcGrossProfit(last);
+    if (!rev || gp === null) return null;
+    return (gp/Math.abs(rev)*100).toFixed(1)+'%';
+  }
+  function oiPct(bils2) {
+    const nRev = fn('4001','ricavi di vendita','ricavi netti','revenues');
+    if (!nRev) return null;
+    const last = bils2[bils2.length-1];
+    const rev = nodeTotal(struct,S.mapping,mapKey,last,nRev.id,dashMode);
+    const oi  = calcOperatingIncome(last);
+    if (!rev || oi === null) return null;
+    return (oi/Math.abs(rev)*100).toFixed(1)+'%';
+  }
+
   const kpiDefs = [
     {ic:'\u{1f4c8}', label:'Fatturato',         note:'nodo 4001',    color:'#15803d', border:'#bbf7d0', bg:'#f0fdf4',
      f:(b)=>{ const n=fn('4001'); return n?nodeTotal(struct,S.mapping,mapKey,b,n.id,dashMode):null; }},
+    {ic:'\u{1f4b9}', label:'Gross Profit',       note:()=>gpPct(bils)||'', color:'#166534', border:'#a7f3d0', bg:'#ecfdf5',
+     f:(b)=>calcGrossProfit(b)},
+    {ic:'\u{1f3af}', label:'Operating Income',   note:()=>oiPct(bils)||'', color:'#0f4c81', border:'#a5b4fc', bg:'#eef2ff',
+     f:(b)=>calcOperatingIncome(b)},
     {ic:'\u{1f4e3}', label:'Marketing',          note:'nodo 5202',    color:'#7e22ce', border:'#e9d5ff', bg:'#faf5ff',
      f:(b)=>{ const n=fn('5202'); return n?nodeTotal(struct,S.mapping,mapKey,b,n.id,dashMode):null; }},
     {ic:'\u{1f3ed}', label:'Magazzino',          note:'',             color:'#0891b2', border:'#bae6fd', bg:'#f0f9ff',
@@ -1074,7 +1123,7 @@ function dashKPI() {
     return '<div style="background:'+d.bg+';border:1px solid '+d.border+';border-radius:12px;padding:12px 14px;min-width:160px;flex:1">'
       + '<p style="font-size:13px;font-weight:700;color:#334155;margin-bottom:10px">'
       + d.ic+' '+d.label
-      + (d.note?'<span style="font-size:9px;color:#a8a29e;margin-left:5px">'+d.note+'</span>':'')
+      + (d.note?(()=>{const n=typeof d.note==='function'?d.note():d.note; return n?'<span style="font-size:9px;color:#a8a29e;margin-left:5px">'+n+'</span>':'';})()):'')
       + '</p>'
       + rows
       + '</div>';
