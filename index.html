@@ -2077,7 +2077,7 @@ function rReport() {
           ${grp(tb('📅 Quarter',rptGroupQ,"toggleGroupQ()","Aggrega per quarter fiscale (Q1=Apr-Giu, Q2=Lug-Set, Q3=Ott-Dic, Q4=Gen-Mar)"))}
         </div>
         <div style="display:flex;gap:5px">
-          <button class="btn btn-sm btn-off no-print" onclick="expRptCSV()">⬇ CSV</button>
+          <button class="btn btn-sm btn-off no-print" onclick="expRptXLSX()">⬇ Excel</button>
           <button class="btn btn-sm btn-off no-print" onclick="printBilancio()">🖨 Stampa</button>
         </div>
       </div>
@@ -2658,6 +2658,286 @@ function rRptKPI(struct, mapKey, selBils) {
       </div>`).join('')}
     </div>`).join('')}
   </div>`;
+}
+
+// ══════════════════════════════════════════════════════════
+// XLSX REPORT EXPORT (zero dipendenze — ZIP store + Open XML)
+// ══════════════════════════════════════════════════════════
+function _crc32(data) {
+  let c = 0xFFFFFFFF;
+  for (let i = 0; i < data.length; i++) {
+    c ^= data[i];
+    for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+  }
+  return (c ^ 0xFFFFFFFF) >>> 0;
+}
+function _colLetter(n) {
+  let s = ''; n++;
+  while (n > 0) { n--; s = String.fromCharCode(65 + (n % 26)) + s; n = Math.floor(n / 26); }
+  return s;
+}
+function _xmlEsc(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\x00/g,'');
+}
+
+function _buildXlsx(xlRows, colWidths) {
+  const enc = new TextEncoder();
+  // Shared strings (populated while building worksheet XML)
+  const sst = [], sstMap = {};
+  function si(s) {
+    const k = String(s == null ? '' : s);
+    if (k in sstMap) return sstMap[k];
+    sstMap[k] = sst.length; sst.push(k); return sst.length - 1;
+  }
+  // xf styles: 0=text 1=num 2=bold-text 3=bold-num 4=italic-text 5=italic-num 6=small-text 7=small-num
+  const stylesXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+<numFmts count="1"><numFmt numFmtId="164" formatCode="#,##0.00;(#,##0.00)"/></numFmts>
+<fonts count="4">
+ <font><sz val="11"/><name val="Calibri"/></font>
+ <font><sz val="11"/><name val="Calibri"/><b/></font>
+ <font><sz val="11"/><name val="Calibri"/><i/></font>
+ <font><sz val="9"/><name val="Calibri"/><color rgb="FF6B7280"/></font>
+</fonts>
+<fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills>
+<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>
+<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
+<cellXfs count="8">
+ <xf numFmtId="0"   fontId="0" fillId="0" borderId="0" xfId="0"/>
+ <xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>
+ <xf numFmtId="0"   fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/>
+ <xf numFmtId="164" fontId="1" fillId="0" borderId="0" xfId="0" applyNumberFormat="1" applyFont="1"/>
+ <xf numFmtId="0"   fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1"/>
+ <xf numFmtId="164" fontId="2" fillId="0" borderId="0" xfId="0" applyNumberFormat="1" applyFont="1"/>
+ <xf numFmtId="0"   fontId="3" fillId="0" borderId="0" xfId="0" applyFont="1"/>
+ <xf numFmtId="164" fontId="3" fillId="0" borderId="0" xfId="0" applyNumberFormat="1" applyFont="1"/>
+</cellXfs>
+<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>
+</styleSheet>`;
+
+  // Worksheet rows XML (also populates sst)
+  const rowsXml = xlRows.map((row, ri) => {
+    const r = ri + 1;
+    const olAttr = row.ol > 0 ? ` outlineLevel="${row.ol}"` : '';
+    const cx = row.cells.map((cell, ci) => {
+      if (cell == null || cell.v == null) return '';
+      const ref = _colLetter(ci) + r, s = cell.s ?? 0;
+      if (typeof cell.v === 'number' && isFinite(cell.v))
+        return `<c r="${ref}" s="${s}"><v>${cell.v}</v></c>`;
+      return `<c r="${ref}" t="s" s="${s}"><v>${si(cell.v)}</v></c>`;
+    }).join('');
+    return `<row r="${r}"${olAttr}>${cx}</row>`;
+  }).join('');
+
+  const colsXml = colWidths.map((w,i) =>
+    `<col min="${i+1}" max="${i+1}" width="${w}" customWidth="1"/>`).join('');
+  const wsXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+<sheetViews><sheetView workbookViewId="0">
+ <pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/>
+</sheetView></sheetViews>
+<sheetFormatPr defaultColWidth="18" outlineLevelRow="3"/>
+<cols>${colsXml}</cols>
+<sheetData>${rowsXml}</sheetData>
+</worksheet>`;
+
+  const sstXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="${sst.length}" uniqueCount="${sst.length}">
+${sst.map(s=>`<si><t xml:space="preserve">${_xmlEsc(s)}</t></si>`).join('')}
+</sst>`;
+
+  const ctXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+ <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+ <Default Extension="xml" ContentType="application/xml"/>
+ <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+ <Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+ <Override PartName="/xl/sharedStrings.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml"/>
+ <Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>
+</Types>`;
+  const relsXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+ <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
+</Relationships>`;
+  const wbXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+<sheets><sheet name="Report" sheetId="1" r:id="rId1"/></sheets></workbook>`;
+  const wbRelsXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+ <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
+ <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings" Target="sharedStrings.xml"/>
+ <Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
+</Relationships>`;
+
+  // Build ZIP (method=0, store uncompressed)
+  const files = [
+    ['[Content_Types].xml',        enc.encode(ctXml)],
+    ['_rels/.rels',                enc.encode(relsXml)],
+    ['xl/workbook.xml',            enc.encode(wbXml)],
+    ['xl/_rels/workbook.xml.rels', enc.encode(wbRelsXml)],
+    ['xl/styles.xml',              enc.encode(stylesXml)],
+    ['xl/sharedStrings.xml',       enc.encode(sstXml)],
+    ['xl/worksheets/sheet1.xml',   enc.encode(wsXml)],
+  ];
+  const entries = []; let zipOffset = 0;
+  for (const [name, data] of files) {
+    const nb = enc.encode(name), crc = _crc32(data);
+    const lfh = new Uint8Array(30 + nb.length);
+    const lv = new DataView(lfh.buffer);
+    lv.setUint32(0,0x04034B50,true); lv.setUint16(4,20,true);
+    lv.setUint32(14,crc,true); lv.setUint32(18,data.length,true); lv.setUint32(22,data.length,true);
+    lv.setUint16(26,nb.length,true); lfh.set(nb,30);
+    entries.push({nb,lfh,data,crc,offset:zipOffset});
+    zipOffset += lfh.length + data.length;
+  }
+  const cdParts = entries.map(e => {
+    const cd = new Uint8Array(46 + e.nb.length);
+    const cv = new DataView(cd.buffer);
+    cv.setUint32(0,0x02014B50,true); cv.setUint16(4,0x0314,true); cv.setUint16(6,20,true);
+    cv.setUint32(16,e.crc,true); cv.setUint32(20,e.data.length,true); cv.setUint32(24,e.data.length,true);
+    cv.setUint16(28,e.nb.length,true); cv.setUint32(42,e.offset,true);
+    cd.set(e.nb,46); return cd;
+  });
+  const cdSize = cdParts.reduce((s,p)=>s+p.length,0);
+  const eocd = new Uint8Array(22);
+  const ev = new DataView(eocd.buffer);
+  ev.setUint32(0,0x06054B50,true); ev.setUint16(8,entries.length,true);
+  ev.setUint16(10,entries.length,true); ev.setUint32(12,cdSize,true); ev.setUint32(16,zipOffset,true);
+  const all = [...entries.flatMap(e=>[e.lfh,e.data]),...cdParts,eocd];
+  const total = all.reduce((s,a)=>s+a.length,0);
+  const out = new Uint8Array(total); let pos = 0;
+  for (const a of all) { out.set(a,pos); pos+=a.length; }
+  return out.buffer;
+}
+
+function expRptXLSX() {
+  const {struct, mapKey, bils} = rptParams();
+  const selBils = bils.filter(b=>rptPeriods.includes(b.period));
+  if (!selBils.length) { alert('Nessun periodo selezionato.'); return; }
+  const _riclass = rptView.includes('civ') ? (S.riclassCiv||[]) : (S.riclassIFRS||[]);
+  const kD = mapKey==='civ'?'civD':mapKey==='corp'?'corpD':'civ6D';
+  const kC = mapKey==='civ'?'civC':mapKey==='corp'?'corpC':'civ6C';
+
+  // Build cols (same logic as rRptTable)
+  const cols = (() => {
+    if (!rptGroupQ) return selBils.map(b=>({label:b.period, bils:[b], isQ:false}));
+    const groups = new Map();
+    selBils.forEach(b => {
+      const [y,m] = b.period.slice(0,7).split('-').map(Number);
+      const fy=m>=4?y:y-1, q=Math.floor((m>=4?m-4:m+8)/3)+1, k=`${fy}-Q${q}`;
+      if (!groups.has(k)) groups.set(k,{fy,q,bils:[]});
+      groups.get(k).bils.push(b);
+    });
+    return [...groups.values()].map(({fy,q,bils})=>{
+      const ends={1:'Giu',2:'Set',3:'Dic',4:'Mar'};
+      return {label:`Q${q} ${fy}/${String(fy+1).slice(2)} (al ${ends[q]} ${q===4?fy+1:fy})`, bils, isQ:true};
+    });
+  })();
+
+  function withAdj(bil,mode,fn) {
+    _currentRiclassAdj=calcRiclassAdj(struct,S.mapping,mapKey,bil,mode,_riclass);
+    const r=fn(); _currentRiclassAdj=null; return r;
+  }
+  function colNodeVal(col,nodeId) {
+    if(!col.isQ||rptMode==='ptd') return col.bils.reduce((s,b)=>s+withAdj(b,rptMode,()=>nodeTotal(struct,S.mapping,mapKey,b,nodeId,rptMode)),0);
+    const last=col.bils[col.bils.length-1];
+    return withAdj(last,'ytd',()=>nodeTotal(struct,S.mapping,mapKey,last,nodeId,'ytd'));
+  }
+  function colAccVal(col,accId) {
+    if(!col.isQ||rptMode==='ptd') return col.bils.reduce((s,b)=>s+getBalance(b,accId,rptMode),0);
+    return getBalanceYTD(col.bils[col.bils.length-1],accId);
+  }
+  function colRuleVal(col,rule) {
+    function amt(bil,mode) {
+      if(rule.active===false||(rule.period&&rule.period!==bil.period)) return 0;
+      if(rule.type==='account') {
+        const a=S.coa.find(x=>x.id===rule.source); if(!a) return 0;
+        const bal=getBalance(bil,a.id,mode); if(!bal) return 0;
+        return (rule.amount!=null&&rule.amount>0)?Math.sign(bal)*Math.abs(rule.amount):bal;
+      } else {
+        const sn=resolveNode(struct,rule.source); if(!sn) return 0;
+        const saved=_currentRiclassAdj; _currentRiclassAdj=null;
+        const tot=nodeTotal(struct,S.mapping,mapKey,bil,sn,mode);
+        _currentRiclassAdj=saved; if(!tot) return 0;
+        return (rule.amount!=null&&rule.amount>0)?Math.sign(tot)*Math.abs(rule.amount):tot;
+      }
+    }
+    if(!col.isQ||rptMode==='ptd') return col.bils.reduce((s,b)=>s+amt(b,rptMode),0);
+    return amt(col.bils[col.bils.length-1],'ytd');
+  }
+
+  // xlRows: [{ol:0-3, cells:[{v,s}]}]
+  // s: 0=text 1=num 2=bold-text 3=bold-num 4=italic-text 5=italic-num 6=small-text 7=small-num
+  const xlRows = [];
+  const SP = '\u00a0\u00a0'; // indent unit (non-breaking spaces)
+
+  // Header row
+  xlRows.push({ol:0, cells:[{v:'Codice',s:2},{v:'Voce',s:2},...cols.map(c=>({v:c.label,s:2}))]});
+
+  function addXlNode(node, lv) {
+    const isPct = node.formula && /^\s*=?\s*[^+\-]+\/[^+\-]+\s*$/.test(node.formula);
+    const sb = lv===0?2:lv===1?4:0; // bold / italic / normal
+    const nb = sb+1;                 // num style
+    const vals = cols.map(c=>colNodeVal(c,node.id));
+    const indent = SP.repeat(lv);
+    xlRows.push({
+      ol: Math.min(lv,3),
+      cells: [
+        {v:node.id,   s:sb},
+        {v:indent+node.name, s:sb},
+        ...vals.map(v => isPct
+          ? {v: v!==0?(v*100).toFixed(2).replace('.',',')+' %':'—', s:sb}
+          : {v, s:nb})
+      ]
+    });
+
+    const children = struct.filter(n=>n.parentId===node.id);
+    const doDetails = () => {
+      if (!rptExpand) return;
+      // Conti analitici
+      S.coa.forEach(a => {
+        const m=S.mapping[a.id]; if(!m) return;
+        const r1=resolveNode(struct,m[kD]), r2=resolveNode(struct,m[kC]);
+        if(r1!==node.id&&r2!==node.id) return;
+        const aVals=cols.map(c=>colAccVal(c,a.id));
+        if(!aVals.some(v=>v!==0)) return;
+        xlRows.push({ol:Math.min(lv+1,3), cells:[
+          {v:a.id, s:6},{v:SP.repeat(lv+1)+a.name, s:6},
+          ...aVals.map(v=>({v, s:7}))
+        ]});
+      });
+      // Righe riclassifica
+      for (const r of _riclass) {
+        if(r.active===false) continue;
+        const dstN=resolveNode(struct,r.target);
+        const isIn=dstN===node.id;
+        const isOut=r.type==='node'
+          ? resolveNode(struct,r.source)===node.id
+          : (()=>{const mm=S.mapping[r.source];if(!mm)return false;return resolveNode(struct,mm[kD])===node.id||resolveNode(struct,mm[kC])===node.id;})();
+        if(!isIn&&!isOut) continue;
+        const rVals=cols.map(c=>isIn?colRuleVal(c,r):-colRuleVal(c,r));
+        if(!rVals.some(v=>v!==0)) continue;
+        const lbl=SP.repeat(lv+1)+(isIn?'↷ ':'↗ ')+(isIn?r.sourceName||r.source:r.targetName||r.target);
+        xlRows.push({ol:Math.min(lv+1,3), cells:[
+          {v:r.source, s:4},{v:lbl, s:4},
+          ...rVals.map(v=>({v, s:5}))
+        ]});
+      }
+    };
+
+    if (!node.totEnd) { doDetails(); children.forEach(c=>addXlNode(c,lv+1)); }
+    else              { children.forEach(c=>addXlNode(c,lv+1)); doDetails(); }
+  }
+
+  struct.filter(n=>!n.parentId).forEach(n=>addXlNode(n,0));
+
+  const colWidths = [20, 44, ...cols.map(()=>18)];
+  const ab = _buildXlsx(xlRows, colWidths);
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([ab],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));
+  a.download = `report_${rptView}_${rptMode}_${new Date().toISOString().slice(0,10)}.xlsx`;
+  a.click(); URL.revokeObjectURL(a.href);
 }
 
 function expRptCSV() {
