@@ -1040,7 +1040,9 @@ function dashKPI() {
   }
 
   function calcGrossProfit(b) {
-    const nGP = struct.find(n=>n.id==='IM01_GP') || fn('gross profit','margine lordo','margine commerciale','contributed margin','gross');
+    const corpNode = S.corporate.find(n=>n.id==='IM01_GP');
+    if (corpNode) return nodeTotal(S.corporate,S.mapping,'corp',b,corpNode.id,dashMode);
+    const nGP = fn('gross profit','margine lordo','margine commerciale','contributed margin','gross');
     if (nGP) return nodeTotal(struct,S.mapping,mapKey,b,nGP.id,dashMode);
     const nRev  = fn('4001','ricavi di vendita','ricavi netti','revenues');
     const nCogs = fn('5001','5000','costo del venduto','costo beni venduti','cost of sales','costo delle merci vendute');
@@ -1049,7 +1051,9 @@ function dashKPI() {
   }
 
   function calcOperatingIncome(b) {
-    const nOI = struct.find(n=>n.id==='IM01_OPER') || fn('ebit','operating income','risultato operativo','reddito operativo','utile operativo','operating profit','risultato della gestione');
+    const corpNode = S.corporate.find(n=>n.id==='IM01_OPER');
+    if (corpNode) return nodeTotal(S.corporate,S.mapping,'corp',b,corpNode.id,dashMode);
+    const nOI = fn('ebit','operating income','risultato operativo','reddito operativo','utile operativo','operating profit','risultato della gestione');
     if (nOI) return nodeTotal(struct,S.mapping,mapKey,b,nOI.id,dashMode);
     const gp = calcGrossProfit(b); if (gp === null) return null;
     const nOpex = fn('opex','spese operative','costi operativi','operating expenses','costi generali','sg&a');
