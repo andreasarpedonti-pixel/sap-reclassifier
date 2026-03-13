@@ -1081,9 +1081,17 @@ function dashKPI() {
     return utileNetto - tot63;
   }
 
+  function _corpWithAdj(b, fn2) {
+    const saved = _currentRiclassAdj;
+    _currentRiclassAdj = calcRiclassAdj(S.corporate, S.mapping, 'corp', b, dashMode, S.riclassIFRS||[]);
+    const r = fn2();
+    _currentRiclassAdj = saved;
+    return r;
+  }
+
   function calcGrossProfit(b) {
     const corpNode = S.corporate.find(n=>n.id==='IM01_GP');
-    if (corpNode) return nodeTotal(S.corporate,S.mapping,'corp',b,corpNode.id,dashMode);
+    if (corpNode) return _corpWithAdj(b, ()=>nodeTotal(S.corporate,S.mapping,'corp',b,corpNode.id,dashMode));
     const nGP = fn('gross profit','margine lordo','margine commerciale','contributed margin','gross');
     if (nGP) return nodeTotal(struct,S.mapping,mapKey,b,nGP.id,dashMode);
     const nRev  = fn('4001','ricavi di vendita','ricavi netti','revenues');
@@ -1094,7 +1102,7 @@ function dashKPI() {
 
   function calcOperatingIncome(b) {
     const corpNode = S.corporate.find(n=>n.id==='IM01_OPER');
-    if (corpNode) return nodeTotal(S.corporate,S.mapping,'corp',b,corpNode.id,dashMode);
+    if (corpNode) return _corpWithAdj(b, ()=>nodeTotal(S.corporate,S.mapping,'corp',b,corpNode.id,dashMode));
     const nOI = fn('ebit','operating income','risultato operativo','reddito operativo','utile operativo','operating profit','risultato della gestione');
     if (nOI) return nodeTotal(struct,S.mapping,mapKey,b,nOI.id,dashMode);
     const gp = calcGrossProfit(b); if (gp === null) return null;
@@ -2428,7 +2436,6 @@ function rRptTable() {
     const ch    = kids(struct,node.id);
     const lv    = depth(struct,node.id);
     const cls   = lv===0?'r-sec':lv===1?'r-grp':'r-nod';
-    const clsHK = cls + (hasKids?' r-has-kids':'');
     const pad   = lv*14+6;
     const bals  = cols.map(c=>colNodeTotal(c,node.id));
     const kD=mapKey==='civ'?'civD':'corpD', kC=mapKey==='civ'?'civC':'corpC';
@@ -2436,6 +2443,7 @@ function rRptTable() {
       const m2=S.mapping[a.id]; if(!m2) return false;
       return resolveNode(struct,m2[kD])===node.id||resolveNode(struct,m2[kC])===node.id;
     }));
+    const clsHK = cls + (hasKids?' r-has-kids':'');
     const isColl = rptCollapsed.has(node.id);
     const tog   = hasKids
       ? `<span data-tog="${esc(node.id)}" onclick="event.stopPropagation();toggleCollapse('${esc(node.id)}')"
