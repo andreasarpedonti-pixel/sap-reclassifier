@@ -117,14 +117,14 @@ input:focus,select:focus{border-color:#111;box-shadow:0 0 0 2px rgba(0,0,0,.06)}
 /* Colonna semaforo sticky-right */
 .rpt-tbl th:last-child{position:sticky;right:0;z-index:3;background:#fafafa;box-shadow:-2px 0 5px -1px rgba(0,0,0,.09);text-align:center}
 .rpt-tbl td:last-child{position:sticky;right:0;z-index:1;box-shadow:-2px 0 4px -1px rgba(0,0,0,.06);text-align:center;padding:2px 8px}
-.r-sec>td:last-child{background:#f0f2f5}
-.r-grp>td:last-child{background:#f8f9fb}
-.r-nod>td:last-child{background:#fff}
+.r-sec>td:last-child{background:var(--row-bg,#f0f2f5)}
+.r-grp>td:last-child{background:var(--row-bg,#f8f9fb)}
+.r-nod>td:last-child{background:var(--row-bg,#fff)}
 .r-acc>td:last-child{background:#fff}
 .r-riclass>td:last-child{background:#f0fdf4}
 .r-riclass-out>td:last-child{background:#fff7ed}
-.r-sec:hover>td:last-child{background:#e8ebf0!important}
-.r-grp:hover>td:last-child{background:#f0f2f5!important}
+.r-sec:hover>td:last-child{background:var(--row-bg-h,#e8ebf0)!important}
+.r-grp:hover>td:last-child{background:var(--row-bg-h,#f0f2f5)!important}
 .r-nod:hover>td:last-child,.r-acc:hover>td:last-child{background:#f9fafb!important}
 .r-riclass:hover>td:last-child{background:#dcfce7!important}
 .r-riclass-out:hover>td:last-child{background:#ffedd5!important}
@@ -134,53 +134,95 @@ input:focus,select:focus{border-color:#111;box-shadow:0 0 0 2px rgba(0,0,0,.06)}
 .col-rh{position:absolute;right:-2px;top:0;bottom:0;width:5px;cursor:col-resize;z-index:10;border-right:2px solid transparent;transition:border-color .15s}
 .col-rh:hover,.col-rh.dragging{border-right-color:rgba(0,0,0,.25)}
 
-/* LV0 — SEZIONE */
+/* ── LV0 SEZIONE ────────────────────────────────────────── */
+.r-sec{--row-bg:#f0f2f5;--row-bg-h:#e8ebf0}
 .r-sec>td{
-  background:#f0f2f5;
-  color:#111;
-  font-weight:700;
-  font-size:13px;
-  border-top:2px solid #c8cdd6;
-  border-bottom:1px solid #c8cdd6;
-  padding-top:8px;
-  padding-bottom:8px;
+  background:var(--row-bg,#f0f2f5);
+  color:#111;font-weight:700;font-size:13px;
+  border-top:2px solid #c8cdd6;border-bottom:1px solid #c8cdd6;
+  padding-top:8px;padding-bottom:8px;
 }
 .r-sec>td:first-child{border-left:4px solid #374151;padding-left:10px}
-.r-sec:hover>td{background:#e8ebf0!important}
+.r-sec:hover>td{background:var(--row-bg-h,#e8ebf0)!important}
 
-/* LV1 — GRUPPO */
+/* ── LV1 GRUPPO ─────────────────────────────────────────── */
+.r-grp{--row-bg:#f8f9fb;--row-bg-h:#f0f2f5}
 .r-grp>td{
-  background:#f8f9fb;
-  color:#374151;
-  font-weight:600;
-  font-style:italic;
-  font-size:12px;
+  background:var(--row-bg,#f8f9fb);
+  color:#374151;font-weight:600;font-style:italic;font-size:12px;
   border-bottom:1px solid #e4e6ea;
 }
 .r-grp>td:first-child{border-left:3px solid #9ca3af;padding-left:12px}
-.r-grp:hover>td{background:#f0f2f5!important}
+.r-grp:hover>td{background:var(--row-bg-h,#f0f2f5)!important}
 
-/* LV2 — NODO */
+/* ── LV2 NODO FOGLIA (senza figli) ─────────────────────── */
+.r-nod{--row-bg:#fff}
 .r-nod>td{
-  background:#fff;
-  color:#374151;
-  font-weight:500;
-  font-size:12px;
+  background:#fff;color:#1e293b;font-weight:500;font-size:12px;
   border-bottom:1px solid #eff0f2;
 }
 .r-nod>td:first-child{border-left:2px solid #d1d5db;padding-left:14px}
 .r-nod:hover>td{background:#f9fafb!important}
 
-/* CONTO ANALITICO */
+/* ── LV2 NODO SUBTOTALE (con figli) ────────────────────── */
+.r-nod.r-has-kids{--row-bg:#f4f5f7;--row-bg-h:#ebecf0}
+.r-nod.r-has-kids>td{
+  background:var(--row-bg,#f4f5f7);
+  color:#1e293b;font-weight:600;font-size:12px;
+  border-bottom:1px solid #e2e4e8;
+}
+.r-nod.r-has-kids>td:first-child{border-left:2px solid #94a3b8}
+.r-nod.r-has-kids:hover>td{background:var(--row-bg-h,#ebecf0)!important}
+.r-nod.r-has-kids>td:last-child{background:var(--row-bg,#f4f5f7)}
+.r-nod.r-has-kids:hover>td:last-child{background:var(--row-bg-h,#ebecf0)!important}
+
+/* ── CONTO ANALITICO ────────────────────────────────────── */
 .r-acc>td{
-  background:#fff;
-  color:#6b7280;
-  font-size:10px;
-  font-weight:400;
+  background:#fff;color:#374151;font-size:11px;font-weight:400;
   border-bottom:1px solid #f5f5f5;
 }
 .r-acc>td:first-child{padding-left:20px}
 .r-acc:hover>td{background:#f9fafb!important}
+
+/* ══════════════════════════════════════════════════════════
+   TEMI REPORT
+   rpt-corp  = IFRS Corporate     → blu/indigo
+   rpt-civ   = Locale / Civile    → verde/smeraldo
+   rpt-civ6  = VI Direttiva CEE   → viola
+   ══════════════════════════════════════════════════════════ */
+
+/* ── CORPORATE ──────────────────────────────────────────── */
+.rpt-corp .r-sec{--row-bg:#eef2ff;--row-bg-h:#e0e7ff}
+.rpt-corp .r-sec>td{border-top-color:#a5b4fc;border-bottom-color:#c7d2fe}
+.rpt-corp .r-sec>td:first-child{border-left-color:#4f46e5}
+.rpt-corp .r-grp{--row-bg:#f5f7ff;--row-bg-h:#eef2ff}
+.rpt-corp .r-grp>td{border-bottom-color:#dde3f8}
+.rpt-corp .r-grp>td:first-child{border-left-color:#818cf8}
+.rpt-corp .r-nod.r-has-kids{--row-bg:#fafbff;--row-bg-h:#eff2ff}
+.rpt-corp .r-nod.r-has-kids>td{border-bottom-color:#e5e9f8}
+.rpt-corp .r-nod.r-has-kids>td:first-child{border-left-color:#a5b4fc}
+
+/* ── LOCALE / CIVILE ────────────────────────────────────── */
+.rpt-civ .r-sec{--row-bg:#ecfdf5;--row-bg-h:#d1fae5}
+.rpt-civ .r-sec>td{border-top-color:#6ee7b7;border-bottom-color:#a7f3d0}
+.rpt-civ .r-sec>td:first-child{border-left-color:#059669}
+.rpt-civ .r-grp{--row-bg:#f3fdf8;--row-bg-h:#d1fae5}
+.rpt-civ .r-grp>td{border-bottom-color:#c6f6e3}
+.rpt-civ .r-grp>td:first-child{border-left-color:#34d399}
+.rpt-civ .r-nod.r-has-kids{--row-bg:#f9fefb;--row-bg-h:#e6faf0}
+.rpt-civ .r-nod.r-has-kids>td{border-bottom-color:#c6f6e3}
+.rpt-civ .r-nod.r-has-kids>td:first-child{border-left-color:#6ee7b7}
+
+/* ── VI DIRETTIVA CEE ───────────────────────────────────── */
+.rpt-civ6 .r-sec{--row-bg:#f5f3ff;--row-bg-h:#ede9fe}
+.rpt-civ6 .r-sec>td{border-top-color:#c4b5fd;border-bottom-color:#ddd6fe}
+.rpt-civ6 .r-sec>td:first-child{border-left-color:#7c3aed}
+.rpt-civ6 .r-grp{--row-bg:#faf9ff;--row-bg-h:#ede9fe}
+.rpt-civ6 .r-grp>td{border-bottom-color:#ebe8fd}
+.rpt-civ6 .r-grp>td:first-child{border-left-color:#a78bfa}
+.rpt-civ6 .r-nod.r-has-kids{--row-bg:#fdfcff;--row-bg-h:#f0ecfe}
+.rpt-civ6 .r-nod.r-has-kids>td{border-bottom-color:#e8e4fc}
+.rpt-civ6 .r-nod.r-has-kids>td:first-child{border-left-color:#c4b5fd}
 
 /* TOTALI UTILE */
 .r-utile-ai>td{
@@ -2386,6 +2428,7 @@ function rRptTable() {
     const ch    = kids(struct,node.id);
     const lv    = depth(struct,node.id);
     const cls   = lv===0?'r-sec':lv===1?'r-grp':'r-nod';
+    const clsHK = cls + (hasKids?' r-has-kids':'');
     const pad   = lv*14+6;
     const bals  = cols.map(c=>colNodeTotal(c,node.id));
     const kD=mapKey==='civ'?'civD':'corpD', kC=mapKey==='civ'?'civC':'corpC';
@@ -2408,7 +2451,7 @@ function rRptTable() {
     // Nodi con formula pura divisione → valori in percentuale
     const isPct = node.formula && /^\s*=?\s*[^+\-]+\/[^+\-]+\s*$/.test(node.formula);
     const fmtBal = isPct ? v => v!==0 ? (v*100).toFixed(1).replace('.',',')+'%' : '—' : v => v!==0 ? fmt(v) : '—';
-    const nodeRow = `<tr class="${cls}${hidden?' r-hidden':''}" data-nid="${esc(node.id)}" data-par="${esc(parentId||'')}"
+    const nodeRow = `<tr class="${clsHK}${hidden?' r-hidden':''}" data-nid="${esc(node.id)}" data-par="${esc(parentId||'')}"
         onclick="toggleCollapse('${esc(node.id)}')" style="cursor:${hasKids?'pointer':'default'}">
       <td style="padding-left:${pad}px;position:sticky;left:0;z-index:1;background:var(--row-bg,#fff)">
         <span style="display:inline-flex;align-items:center;gap:3px">
@@ -2656,6 +2699,7 @@ function rRptTable() {
     }
   }
 
+  tbl.className='rpt-tbl rpt-'+mapKey;
   tbl.innerHTML=thead+`<tbody>${rows.join('')}</tbody>`;
   initColResize(tbl);
   requestAnimationFrame(()=>{if(_scr){_scr.scrollTop=_scrollTop;_scr.scrollLeft=_scrollLeft;}});
