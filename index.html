@@ -3902,9 +3902,102 @@ function reconRefresh(){const k=(reconNodeId||'')+'::'+reconPeriod;const voci=S.
 // ══════════════════════════════════════════════════════════
 function printBilancio() {
   const {label} = rptParams();
-  const el = document.getElementById('print-subtitle');
-  if (el) el.textContent = 'Bilancio riclassificato — ' + label + ' — ' + rptMode.toUpperCase();
-  window.print();
+  const tbl = document.getElementById('rpt-tbl');
+  if (!tbl) return;
+
+  const company = 'Serom Medical Technology s.r.l.';
+  const now = new Date();
+  const dateStr = now.toLocaleDateString('it-IT', {day:'2-digit', month:'long', year:'numeric'});
+  const modeLabel = rptMode==='ytd' ? 'Progressivo (YTD)' : 'Mensile (PTD)';
+
+  // Clona la tabella e rimuovi le ultime 2 colonne (Note + Riconciliazione)
+  const clone = tbl.cloneNode(true);
+  clone.querySelectorAll('tr').forEach(tr => {
+    const cells = [...tr.querySelectorAll(':scope > td, :scope > th')];
+    if (cells.length >= 2) { cells[cells.length-1].remove(); cells[cells.length-2].remove(); }
+  });
+
+  // Rimuovi righe collassate
+  clone.querySelectorAll('.r-hidden').forEach(el => el.remove());
+
+  // Rimuovi sticky, cursor, elementi interattivi
+  clone.querySelectorAll('[style]').forEach(el => {
+    el.style.position = '';
+    el.style.left = '';
+    el.style.zIndex = '';
+    el.style.cursor = '';
+    el.style.background = '';
+  });
+  clone.querySelectorAll('button, input').forEach(el => el.remove());
+  clone.querySelectorAll('[onclick]').forEach(el => el.removeAttribute('onclick'));
+  // Rimuovi le frecce collapse/expand (non utili in stampa)
+  clone.querySelectorAll('[data-tog]').forEach(el => el.parentNode && (el.outerHTML=''));
+  clone.querySelectorAll('span[style*="width:12px"]').forEach(el => el.remove());
+
+  const tblHtml = clone.outerHTML;
+
+  const w = window.open('', '_blank', 'width=1200,height=900');
+  if (!w) { alert('Popup bloccato: consenti le popup per questo sito.'); return; }
+  w.document.write(`<!DOCTYPE html>
+<html lang="it"><head><meta charset="utf-8">
+<title>Bilancio riclassificato — ${esc(label)}</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Helvetica Neue',Arial,Helvetica,sans-serif;font-size:9pt;color:#111;background:#fff}
+@page{
+  size:A4 landscape;
+  margin:1.8cm 1.4cm 2cm 1.4cm;
+  @bottom-left{content:"${company.replace(/'/g,"\\'")}";font-size:8pt;color:#999;font-style:italic}
+  @bottom-right{content:"Pagina " counter(page) " di " counter(pages);font-size:8pt;color:#999}
+}
+.cover{
+  display:flex;justify-content:space-between;align-items:flex-end;
+  margin-bottom:16px;padding-bottom:10px;
+  border-bottom:2.5px solid #1e293b
+}
+.cover-left h1{font-size:13pt;font-weight:700;color:#1e293b;margin-bottom:3px;letter-spacing:-.02em}
+.cover-left p{font-size:9pt;color:#475569;margin-bottom:1px}
+.cover-right{font-size:8pt;color:#94a3b8;text-align:right;line-height:1.6}
+table{width:100%;border-collapse:collapse;font-size:7.5pt}
+thead th{
+  background:#f1f5f9!important;color:#475569;font-size:7pt;
+  text-transform:uppercase;letter-spacing:.05em;padding:5px 8px;
+  border-bottom:1.5px solid #94a3b8;text-align:right;white-space:nowrap;font-weight:600;
+  -webkit-print-color-adjust:exact;print-color-adjust:exact
+}
+thead th:first-child,thead th:nth-child(2){text-align:left}
+td{padding:3px 8px;border-bottom:1px solid #e8ecf0;text-align:right;white-space:nowrap}
+td:first-child{text-align:left;font-size:7pt;color:#94a3b8;font-family:monospace}
+td:nth-child(2){text-align:left}
+.r-sec>td{
+  background:#dce4ed!important;border-top:1.5px solid #64748b!important;
+  font-weight:700!important;font-size:8pt!important;color:#1e293b!important;
+  -webkit-print-color-adjust:exact;print-color-adjust:exact
+}
+.r-grp>td{
+  background:#f0f4f8!important;font-weight:600!important;font-size:7.5pt!important;
+  -webkit-print-color-adjust:exact;print-color-adjust:exact
+}
+.r-nod>td{font-weight:400}
+.r-acc>td{color:#64748b;font-size:7pt}
+.r-utile-netto>td{border-top:2px solid #111!important;font-weight:800!important}
+.neg{color:#b91c1c!important}
+.pos{color:#15803d!important}
+tr:hover>td{background:transparent!important}
+</style></head><body>
+<div class="cover">
+  <div class="cover-left">
+    <h1>${company}</h1>
+    <p>Bilancio riclassificato &mdash; ${esc(label)} &mdash; ${modeLabel}</p>
+  </div>
+  <div class="cover-right">
+    <div>Stampato il ${dateStr}</div>
+  </div>
+</div>
+${tblHtml}
+</body></html>`);
+  w.document.close();
+  setTimeout(()=>{ w.focus(); w.print(); }, 450);
 }
 
 function printRecon(all) {
