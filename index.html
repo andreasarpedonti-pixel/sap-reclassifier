@@ -912,6 +912,19 @@ function parseSAP(rows) {
   return data.length ? { ...meta, rows: data } : null;
 }
 
+// Aggiunge al piano dei conti i conti nuovi trovati in un bilancio SAP
+function mergeBilCoa(bil) {
+  if (!bil?.rows?.length) return;
+  set(s => {
+    const existing = new Set((s.coa||[]).map(a=>a.id));
+    const added = bil.rows
+      .filter(r=>r.id && !existing.has(r.id))
+      .map(r=>({id:r.id, name:r.name}));
+    if (!added.length) return {};
+    return { coa: [...(s.coa||[]), ...added].sort((a,b)=>a.id.localeCompare(b.id)) };
+  });
+}
+
 // ══════════════════════════════════════════════════════════
 // MAPPING PARSERS
 // ══════════════════════════════════════════════════════════
@@ -1353,7 +1366,7 @@ function rBilUI() {
     + '<div class="card-bd">'
     + folderBar
     + '<p style="font-size:12px;color:#78716c;margin-bottom:12px;line-height:1.6">Estrai il bilancio da SAP (query <b>2CCFITRIALBALQ0001</b>) per il ledger <b>' + ledgerLabel + '</b>.<br>Data inizio e data fine periodo vengono letti automaticamente dall\'intestazione SAP. Puoi caricare pi\u00f9 periodi.</p>'
-    + '<div class="upz" onclick="hasFolder?loadFromFolder(false):pickBilFile()">'
+    + '<div class="upz" onclick="_folderHandle?loadFromFolder(false):pickBilFile()">'
     + '<div style="font-size:28px;margin-bottom:8px">\uD83D\uDCC2</div>'
     + upzText
     + '</div>'
@@ -1408,6 +1421,7 @@ async function impBil(inp) {
       const rows = wb.Sheets[wb.SheetNames[0]];
       const bil = parseSAP(rows);
       if (!bil) { err.push(f.name+': formato non riconosciuto'); continue; }
+      mergeBilCoa(bil);
       set(s=>{
         const others = (s[bilKey]||[]).filter(b=>b.period!==bil.period);
         return { [bilKey]: [...others, bil].sort((a,b)=>a.period.localeCompare(b.period)) };
@@ -1440,6 +1454,7 @@ async function reloadBil(period, ledger) {
     const wb = await XLSX.read(await file.arrayBuffer());
     const bil = parseSAP(wb.Sheets[wb.SheetNames[0]]);
     if (!bil) { alert(entry.handle.name + ': formato non riconosciuto'); return; }
+    mergeBilCoa(bil);
     set(s=>({ [bilKey]: [...(s[bilKey]||[]).filter(b=>b.period!==bil.period), bil].sort((a,b)=>a.period.localeCompare(b.period)) }));
     _fileHandles.set(fkey, { handle: entry.handle, period: bil.period, ledger: ledger||'ifrs' });
     rImpTab();
@@ -1460,6 +1475,7 @@ async function reloadAll() {
       const wb = await XLSX.read(await file.arrayBuffer());
       const bil = parseSAP(wb.Sheets[wb.SheetNames[0]]);
       if (!bil) { err.push(fkey+': non riconosciuto'); continue; }
+      mergeBilCoa(bil);
       const ledger = entry.ledger || 'ifrs';
       const bilKey = ledger==='civ' ? 'bilCiv' : 'bilIFRS';
       set(s=>({ [bilKey]: [...(s[bilKey]||[]).filter(b=>b.period!==bil.period), bil].sort((a,b)=>a.period.localeCompare(b.period)) }));
@@ -1543,6 +1559,7 @@ async function loadFromFolder(silent) {
       if (!sheetName || !wb.Sheets[sheetName]) { skipped++; continue; }
       const bil  = parseSAP(wb.Sheets[sheetName]);
       if (!bil) { skipped++; continue; }
+      mergeBilCoa(bil);
       set(s=>({ [bilKey]:[...(s[bilKey]||[]).filter(b=>b.period!==bil.period),bil]
                           .sort((a,b)=>a.period.localeCompare(b.period)) }));
       _fileHandles.set(ledger+'::'+bil.period, { handle:entry, period:bil.period, ledger });
