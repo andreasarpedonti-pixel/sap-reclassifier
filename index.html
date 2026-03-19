@@ -2816,28 +2816,43 @@ function _buildXlsx(xlRows, colWidths) {
     if (k in sstMap) return sstMap[k];
     sstMap[k] = sst.length; sst.push(k); return sst.length - 1;
   }
-  // xf styles: 0=text 1=num 2=bold-text 3=bold-num 4=italic-text 5=italic-num 6=small-text 7=small-num
+  // xf styles:
+  //  0=text no-fill (accounts/detail)  1=num no-fill (accounts/detail)
+  //  2=bold-text no-fill (header)
+  //  3=text dark-fill white-font (lv0)  4=num dark-fill white-font (lv0)
+  //  5=text mid-fill (lv1)              6=num mid-fill (lv1)
+  //  7=text light-fill (lv2+)           8=num light-fill (lv2+)
+  //  9=small-text gray no-fill (accts) 10=small-num gray no-fill (accts)
   const stylesXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
 <numFmts count="1"><numFmt numFmtId="164" formatCode="#,##0.00;(#,##0.00)"/></numFmts>
 <fonts count="4">
  <font><sz val="11"/><name val="Calibri"/></font>
  <font><sz val="11"/><name val="Calibri"/><b/></font>
- <font><sz val="11"/><name val="Calibri"/><i/></font>
+ <font><sz val="11"/><name val="Calibri"/><color rgb="FFFFFFFF"/></font>
  <font><sz val="9"/><name val="Calibri"/><color rgb="FF6B7280"/></font>
 </fonts>
-<fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills>
+<fills count="5">
+ <fill><patternFill patternType="none"/></fill>
+ <fill><patternFill patternType="gray125"/></fill>
+ <fill><patternFill patternType="solid"><fgColor rgb="FF1E3A5F"/><bgColor indexed="64"/></patternFill></fill>
+ <fill><patternFill patternType="solid"><fgColor rgb="FFBFDBFE"/><bgColor indexed="64"/></patternFill></fill>
+ <fill><patternFill patternType="solid"><fgColor rgb="FFEFF6FF"/><bgColor indexed="64"/></patternFill></fill>
+</fills>
 <borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>
 <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
-<cellXfs count="8">
+<cellXfs count="11">
  <xf numFmtId="0"   fontId="0" fillId="0" borderId="0" xfId="0"/>
  <xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>
  <xf numFmtId="0"   fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/>
- <xf numFmtId="164" fontId="1" fillId="0" borderId="0" xfId="0" applyNumberFormat="1" applyFont="1"/>
- <xf numFmtId="0"   fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1"/>
- <xf numFmtId="164" fontId="2" fillId="0" borderId="0" xfId="0" applyNumberFormat="1" applyFont="1"/>
+ <xf numFmtId="0"   fontId="2" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1"/>
+ <xf numFmtId="164" fontId="2" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1" applyNumberFormat="1"/>
+ <xf numFmtId="0"   fontId="0" fillId="3" borderId="0" xfId="0" applyFill="1"/>
+ <xf numFmtId="164" fontId="0" fillId="3" borderId="0" xfId="0" applyFill="1" applyNumberFormat="1"/>
+ <xf numFmtId="0"   fontId="0" fillId="4" borderId="0" xfId="0" applyFill="1"/>
+ <xf numFmtId="164" fontId="0" fillId="4" borderId="0" xfId="0" applyFill="1" applyNumberFormat="1"/>
  <xf numFmtId="0"   fontId="3" fillId="0" borderId="0" xfId="0" applyFont="1"/>
- <xf numFmtId="164" fontId="3" fillId="0" borderId="0" xfId="0" applyNumberFormat="1" applyFont="1"/>
+ <xf numFmtId="164" fontId="3" fillId="0" borderId="0" xfId="0" applyFont="1" applyNumberFormat="1"/>
 </cellXfs>
 <cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>
 </styleSheet>`;
@@ -2994,24 +3009,23 @@ function expRptXLSX() {
   }
 
   // xlRows: [{ol:0-3, cells:[{v,s}]}]
-  // s: 0=text 1=num 2=bold-text 3=bold-num 4=italic-text 5=italic-num 6=small-text 7=small-num
+  // s: 0=text 1=num 2=bold-text(hdr) 3/4=lv0 5/6=lv1 7/8=lv2+ 9=small-text 10=small-num
   const xlRows = [];
-  const SP = '\u00a0\u00a0'; // indent unit (non-breaking spaces)
 
   // Header row
   xlRows.push({ol:0, cells:[{v:'Codice',s:2},{v:'Voce',s:2},...cols.map(c=>({v:c.label,s:2}))]});
 
   function addXlNode(node, lv) {
     const isPct = node.formula && /^\s*=?\s*[^+\-]+\/[^+\-]+\s*$/.test(node.formula);
-    const sb = lv===0?2:lv===1?4:0; // bold / italic / normal
-    const nb = sb+1;                 // num style
+    // stili per livello: lv0=dark fill white font, lv1=medium fill, lv2+=light fill
+    const sb = lv===0 ? 3 : lv===1 ? 5 : 7; // testo
+    const nb = lv===0 ? 4 : lv===1 ? 6 : 8; // numeri
     const vals = cols.map(c=>colNodeVal(c,node.id));
-    const indent = SP.repeat(lv);
     xlRows.push({
       ol: Math.min(lv,3),
       cells: [
         {v:node.id,   s:sb},
-        {v:indent+node.name, s:sb},
+        {v:node.name, s:sb},          // nessuno spazio iniziale
         ...vals.map(v => isPct
           ? {v: v!==0?(v*100).toFixed(2).replace('.',',')+' %':'—', s:sb}
           : {v, s:nb})
@@ -3029,8 +3043,8 @@ function expRptXLSX() {
         const aVals=cols.map(c=>colAccVal(c,a.id));
         if(!aVals.some(v=>v!==0)) return;
         xlRows.push({ol:Math.min(lv+1,3), cells:[
-          {v:a.id, s:6},{v:SP.repeat(lv+1)+a.name, s:6},
-          ...aVals.map(v=>({v, s:7}))
+          {v:a.id, s:9},{v:a.name, s:9},   // nessuno spazio iniziale
+          ...aVals.map(v=>({v, s:10}))
         ]});
       });
       // Righe riclassifica
@@ -3044,10 +3058,10 @@ function expRptXLSX() {
         if(!isIn&&!isOut) continue;
         const rVals=cols.map(c=>isIn?colRuleVal(c,r):-colRuleVal(c,r));
         if(!rVals.some(v=>v!==0)) continue;
-        const lbl=SP.repeat(lv+1)+(isIn?'↷ ':'↗ ')+(isIn?r.sourceName||r.source:r.targetName||r.target);
+        const lbl=(isIn?'↷ ':'↗ ')+(isIn?r.sourceName||r.source:r.targetName||r.target);
         xlRows.push({ol:Math.min(lv+1,3), cells:[
-          {v:r.source, s:4},{v:lbl, s:4},
-          ...rVals.map(v=>({v, s:5}))
+          {v:r.source, s:9},{v:lbl, s:9},  // nessuno spazio iniziale
+          ...rVals.map(v=>({v, s:10}))
         ]});
       }
     };
