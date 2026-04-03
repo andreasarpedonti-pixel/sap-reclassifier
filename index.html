@@ -117,15 +117,15 @@ input:focus,select:focus{border-color:#111;box-shadow:0 0 0 2px rgba(0,0,0,.06)}
 /* Colonna semaforo sticky-right */
 .rpt-tbl th:last-child{position:sticky;right:0;z-index:3;background:#fafafa;box-shadow:-2px 0 5px -1px rgba(0,0,0,.09);text-align:center}
 .rpt-tbl td:last-child{position:sticky;right:0;z-index:1;box-shadow:-2px 0 4px -1px rgba(0,0,0,.06);text-align:center;padding:2px 8px}
-.r-sec>td:last-child{background:var(--row-bg,#d8dfe9)}
-.r-grp>td:last-child{background:var(--row-bg,#eaecf2)}
+.r-sec>td:last-child{background:var(--row-bg,#dbeafe)}
+.r-grp>td:last-child{background:var(--row-bg,#f1f5f9)}
 .r-nod>td:last-child{background:var(--row-bg,#fff)}
 .r-acc>td:last-child{background:#fff}
 .r-riclass>td:last-child{background:#f0fdf4}
 .r-riclass-out>td:last-child{background:#fff7ed}
-.r-sec:hover>td:last-child{background:var(--row-bg-h,#c8d2df)!important}
-.r-grp:hover>td:last-child{background:var(--row-bg-h,#dde2ea)!important}
-.r-nod:hover>td:last-child,.r-acc:hover>td:last-child{background:#f2f5f8!important}
+.r-sec:hover>td:last-child{background:var(--row-bg-h,#bfdbfe)!important}
+.r-grp:hover>td:last-child{background:var(--row-bg-h,#e2e8f0)!important}
+.r-nod:hover>td:last-child,.r-acc:hover>td:last-child{background:#f8fafc!important}
 .r-riclass:hover>td:last-child{background:#dcfce7!important}
 .r-riclass-out:hover>td:last-child{background:#ffedd5!important}
 .r-utile-ai>td:last-child{background:#fff}
@@ -135,25 +135,25 @@ input:focus,select:focus{border-color:#111;box-shadow:0 0 0 2px rgba(0,0,0,.06)}
 .col-rh:hover,.col-rh.dragging{border-right-color:rgba(0,0,0,.25)}
 
 /* ── LV0 SEZIONE ────────────────────────────────────────── */
-.r-sec{--row-bg:#d8dfe9;--row-bg-h:#c8d2df}
+.r-sec{--row-bg:#dbeafe;--row-bg-h:#bfdbfe}
 .r-sec>td{
-  background:var(--row-bg,#d8dfe9);
-  color:#0f172a;font-weight:700;font-size:13px;
-  border-top:2px solid #8899b0;border-bottom:1px solid #8899b0;
+  background:var(--row-bg,#dbeafe);
+  color:#1e3a8a;font-weight:700;font-size:13px;
+  border-top:2px solid #93c5fd;border-bottom:1px solid #93c5fd;
   padding-top:8px;padding-bottom:8px;
 }
-.r-sec>td:first-child{border-left:4px solid #334155;padding-left:10px}
-.r-sec:hover>td{background:var(--row-bg-h,#c8d2df)!important}
+.r-sec>td:first-child{border-left:4px solid #1d4ed8;padding-left:10px}
+.r-sec:hover>td{background:var(--row-bg-h,#bfdbfe)!important}
 
 /* ── LV1 GRUPPO ─────────────────────────────────────────── */
-.r-grp{--row-bg:#eaecf2;--row-bg-h:#dde2ea}
+.r-grp{--row-bg:#f1f5f9;--row-bg-h:#e2e8f0}
 .r-grp>td{
-  background:var(--row-bg,#eaecf2);
-  color:#1e293b;font-weight:600;font-size:12.5px;
-  border-bottom:1px solid #c8cdd6;
+  background:var(--row-bg,#f1f5f9);
+  color:#334155;font-weight:600;font-size:12.5px;
+  border-bottom:1px solid #cbd5e1;
 }
 .r-grp>td:first-child{border-left:3px solid #64748b;padding-left:12px}
-.r-grp:hover>td{background:var(--row-bg-h,#dde2ea)!important}
+.r-grp:hover>td{background:var(--row-bg-h,#e2e8f0)!important}
 
 /* ── LV2 NODO FOGLIA (senza figli) ─────────────────────── */
 .r-nod{--row-bg:#fff}
@@ -161,20 +161,20 @@ input:focus,select:focus{border-color:#111;box-shadow:0 0 0 2px rgba(0,0,0,.06)}
   background:#fff;color:#1e293b;font-weight:500;font-size:12px;
   border-bottom:1px solid #e8ecf0;
 }
-.r-nod>td:first-child{border-left:2px solid #cbd5e1;padding-left:14px}
-.r-nod:hover>td{background:#f2f5f8!important}
+.r-nod>td:first-child{border-left:2px solid #e2e8f0;padding-left:14px}
+.r-nod:hover>td{background:#f8fafc!important}
 
 /* ── LV2 NODO SUBTOTALE (con figli) ────────────────────── */
-.r-nod.r-has-kids{--row-bg:#f0f3f7;--row-bg-h:#e4e9f0}
+.r-nod.r-has-kids{--row-bg:#f8fafc;--row-bg-h:#f1f5f9}
 .r-nod.r-has-kids>td{
-  background:var(--row-bg,#f0f3f7);
+  background:var(--row-bg,#f8fafc);
   color:#1e293b;font-weight:600;font-size:12px;
-  border-bottom:1px solid #cdd3db;
+  border-bottom:1px solid #cbd5e1;
 }
 .r-nod.r-has-kids>td:first-child{border-left:2px solid #94a3b8}
-.r-nod.r-has-kids:hover>td{background:var(--row-bg-h,#e4e9f0)!important}
-.r-nod.r-has-kids>td:last-child{background:var(--row-bg,#f0f3f7)}
-.r-nod.r-has-kids:hover>td:last-child{background:var(--row-bg-h,#e4e9f0)!important}
+.r-nod.r-has-kids:hover>td{background:var(--row-bg-h,#f1f5f9)!important}
+.r-nod.r-has-kids>td:last-child{background:var(--row-bg,#f8fafc)}
+.r-nod.r-has-kids:hover>td:last-child{background:var(--row-bg-h,#f1f5f9)!important}
 
 /* ── CONTO ANALITICO ────────────────────────────────────── */
 .r-acc>td{
@@ -185,44 +185,30 @@ input:focus,select:focus{border-color:#111;box-shadow:0 0 0 2px rgba(0,0,0,.06)}
 .r-acc:hover>td{background:#f9fafb!important}
 
 /* ══════════════════════════════════════════════════════════
-   TEMI REPORT
-   rpt-corp  = IFRS Corporate     → blu/indigo
-   rpt-civ   = Locale / Civile    → verde/smeraldo
-   rpt-civ6  = VI Direttiva CEE   → viola
+   TEMI REPORT — tutti usano blu/grigio, differenziati da bordo
+   rpt-corp  = IFRS Corporate     → blu navy
+   rpt-civ   = Locale / Civile    → verde teal
+   rpt-civ6  = VI Direttiva CEE   → indigo
    ══════════════════════════════════════════════════════════ */
 
 /* ── CORPORATE ──────────────────────────────────────────── */
-.rpt-corp .r-sec{--row-bg:#bfdbfe;--row-bg-h:#93c5fd}
-.rpt-corp .r-sec>td{color:#1e3a8a;border-top-color:#60a5fa;border-bottom-color:#93c5fd}
 .rpt-corp .r-sec>td:first-child{border-left-color:#1d4ed8}
-.rpt-corp .r-grp{--row-bg:#dbeafe;--row-bg-h:#bfdbfe}
-.rpt-corp .r-grp>td{color:#1e3a8a;border-bottom-color:#93c5fd}
 .rpt-corp .r-grp>td:first-child{border-left-color:#3b82f6}
-.rpt-corp .r-nod.r-has-kids{--row-bg:#eff6ff;--row-bg-h:#dbeafe}
-.rpt-corp .r-nod.r-has-kids>td{border-bottom-color:#bfdbfe}
 .rpt-corp .r-nod.r-has-kids>td:first-child{border-left-color:#93c5fd}
 
 /* ── LOCALE / CIVILE ────────────────────────────────────── */
-.rpt-civ .r-sec{--row-bg:#a7f3d0;--row-bg-h:#6ee7b7}
-.rpt-civ .r-sec>td{color:#064e3b;border-top-color:#34d399;border-bottom-color:#6ee7b7}
-.rpt-civ .r-sec>td:first-child{border-left-color:#047857}
-.rpt-civ .r-grp{--row-bg:#d1fae5;--row-bg-h:#a7f3d0}
-.rpt-civ .r-grp>td{color:#064e3b;border-bottom-color:#6ee7b7}
-.rpt-civ .r-grp>td:first-child{border-left-color:#10b981}
-.rpt-civ .r-nod.r-has-kids{--row-bg:#ecfdf5;--row-bg-h:#d1fae5}
-.rpt-civ .r-nod.r-has-kids>td{border-bottom-color:#a7f3d0}
-.rpt-civ .r-nod.r-has-kids>td:first-child{border-left-color:#6ee7b7}
+.rpt-civ .r-sec{--row-bg:#ccfbf1;--row-bg-h:#99f6e4}
+.rpt-civ .r-sec>td{color:#134e4a;border-top-color:#5eead4;border-bottom-color:#99f6e4}
+.rpt-civ .r-sec>td:first-child{border-left-color:#0d9488}
+.rpt-civ .r-grp>td:first-child{border-left-color:#0d9488}
+.rpt-civ .r-nod.r-has-kids>td:first-child{border-left-color:#5eead4}
 
 /* ── VI DIRETTIVA CEE ───────────────────────────────────── */
-.rpt-civ6 .r-sec{--row-bg:#ddd6fe;--row-bg-h:#c4b5fd}
-.rpt-civ6 .r-sec>td{color:#2e1065;border-top-color:#a78bfa;border-bottom-color:#c4b5fd}
-.rpt-civ6 .r-sec>td:first-child{border-left-color:#6d28d9}
-.rpt-civ6 .r-grp{--row-bg:#ede9fe;--row-bg-h:#ddd6fe}
-.rpt-civ6 .r-grp>td{color:#2e1065;border-bottom-color:#c4b5fd}
-.rpt-civ6 .r-grp>td:first-child{border-left-color:#8b5cf6}
-.rpt-civ6 .r-nod.r-has-kids{--row-bg:#f5f3ff;--row-bg-h:#ede9fe}
-.rpt-civ6 .r-nod.r-has-kids>td{border-bottom-color:#ddd6fe}
-.rpt-civ6 .r-nod.r-has-kids>td:first-child{border-left-color:#c4b5fd}
+.rpt-civ6 .r-sec{--row-bg:#e0e7ff;--row-bg-h:#c7d2fe}
+.rpt-civ6 .r-sec>td{color:#312e81;border-top-color:#a5b4fc;border-bottom-color:#c7d2fe}
+.rpt-civ6 .r-sec>td:first-child{border-left-color:#4338ca}
+.rpt-civ6 .r-grp>td:first-child{border-left-color:#6366f1}
+.rpt-civ6 .r-nod.r-has-kids>td:first-child{border-left-color:#a5b4fc}
 
 /* TOTALI UTILE */
 .r-utile-ai>td{
@@ -2443,7 +2429,7 @@ function rRptTable() {
     <th style="text-align:left;min-width:100px;position:sticky;left:0;z-index:3;background:#f8fafc">Codice</th>
     <th style="text-align:left;min-width:180px;position:sticky;left:100px;z-index:3;background:#f8fafc">Voce</th>
     ${cols.map(c=>`<th style="min-width:120px">${colHdr(c)}</th>`).join('')}
-    <th style="min-width:150px;text-align:left;color:#64748b;font-size:10px">Note / ⚖</th>
+    <th style="min-width:220px;text-align:left;color:#64748b;font-size:10px">Note / ⚖</th>
     <th style="width:32px;min-width:32px;padding:4px 8px;color:#64748b;font-size:9px" title="Stato riconciliazione">⚖</th>
   </tr></thead>`;
 
@@ -2509,7 +2495,7 @@ function rRptTable() {
               <input type="text" value="${esc(S.notes[a.id]||'')}"
                 oninput="S.notes['${esc(a.id)}']=this.value;save()"
                 placeholder="nota…"
-                style="width:110px;font-size:10px;padding:2px 5px;border:1px solid #e2e8f0;border-radius:4px;background:transparent;color:#334155"
+                style="width:180px;font-size:11px;padding:3px 6px;border:1px solid #e2e8f0;border-radius:4px;background:transparent;color:#334155"
                 onfocus="this.style.borderColor='#3b82f6'" onblur="this.style.borderColor='#e2e8f0'">
               <button title="Riconciliazione" onclick="event.stopPropagation();goRecon('${esc(a.id)}')"
                 style="background:none;border:none;cursor:pointer;font-size:13px;color:#bfdbfe;padding:1px 4px;border-radius:3px"
@@ -2536,7 +2522,7 @@ function rRptTable() {
           <input type="text" value="${esc(S.notes[noteKey]||'')}"
             oninput="S.notes['${esc(noteKey)}']=this.value;save()"
             placeholder="nota…"
-            style="width:110px;font-size:10px;padding:2px 5px;border:1px solid #e2e8f0;border-radius:4px;background:transparent;color:#334155"
+            style="width:180px;font-size:11px;padding:3px 6px;border:1px solid #e2e8f0;border-radius:4px;background:transparent;color:#334155"
             onfocus="this.style.borderColor='#3b82f6'" onblur="this.style.borderColor='#e2e8f0'">
           ${reconBtn}
         </span>
