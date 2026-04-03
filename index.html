@@ -348,7 +348,7 @@ onSnapshot(_docRef, (snap) => {
   } catch(e) {}
 });
 
-const _storage = getStorage(_fbApp);
+
 
 // Upload PDF: legge il file come base64 e lo salva in Firestore (no Storage)
 // Limite: 500KB → ~685KB base64, ben sotto il limite 1MB di Firestore
@@ -2312,8 +2312,10 @@ function initColResize(tbl) {
 
 function rRptTable() {
   const _scr = document.getElementById('rpt-scroll');
-  const _scrollTop  = _scr ? _scr.scrollTop  : 0;
-  const _scrollLeft = _scr ? _scr.scrollLeft : 0;
+  // Se si torna dalla riconciliazione, usa la posizione salvata; altrimenti la posizione corrente
+  const _scrollTop  = _rptScrollBack>0 ? _rptScrollBack  : (_scr?_scr.scrollTop :0);
+  const _scrollLeft = _rptScrollBack>0 ? _rptScrollLeftBack : (_scr?_scr.scrollLeft:0);
+  _rptScrollBack=0; _rptScrollLeftBack=0;
   const {struct, mapKey, bils} = rptParams();
   const selBils = bils.filter(b=>rptPeriods.includes(b.period));
   // Ultimo periodo per semaforo riconciliazione (usa bilanci del view attivo)
@@ -3535,6 +3537,7 @@ function dupRiclass(ledger, i) {
 // ══════════════════════════════════════════════════════════
 // RICONCILIAZIONE
 let reconNodeId=null
+let _rptScrollBack=0, _rptScrollLeftBack=0;
 function rRecon(){
   const el=document.getElementById('pg-recon');if(!el)return;
   const allP=_allPeriods();
@@ -3796,7 +3799,12 @@ document.addEventListener('paste', function(e) {
 let reconPeriod=null;
 // ── end rRecon helpers ──
 
-function goRecon(nId){reconNodeId=nId;const ap=_allPeriods();reconPeriod=rptPeriods[rptPeriods.length-1]||(ap.length?ap[ap.length-1]:null);page='recon';renderAll();}
+function goRecon(nId){
+  const scr=document.getElementById('rpt-scroll');
+  _rptScrollBack=scr?scr.scrollTop:0;
+  _rptScrollLeftBack=scr?scr.scrollLeft:0;
+  reconNodeId=nId;const ap=_allPeriods();reconPeriod=rptPeriods[rptPeriods.length-1]||(ap.length?ap[ap.length-1]:null);page='recon';renderAll();
+}
 // Incolla voci dagli appunti (tab-separated da Excel)
 async function pasteReconVoci() {
   try {
