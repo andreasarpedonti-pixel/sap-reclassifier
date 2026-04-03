@@ -348,7 +348,7 @@ onSnapshot(_docRef, (snap) => {
   } catch(e) {}
 });
 
-const _storage = getStorage(_fbApp);
+
 
 // Upload PDF: legge il file come base64 e lo salva in Firestore (no Storage)
 // Limite: 500KB → ~685KB base64, ben sotto il limite 1MB di Firestore
