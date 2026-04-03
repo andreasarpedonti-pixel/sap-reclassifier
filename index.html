@@ -292,8 +292,7 @@ input:focus,select:focus{border-color:#111;box-shadow:0 0 0 2px rgba(0,0,0,.06)}
 <!-- Firebase SDK -->
 <script type="module" id="fb-module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getFirestore, doc, getDoc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
-import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject, listAll } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js";
+import { getFirestore, doc, getDoc, setDoc, deleteDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
 const _fbConfig = {
   apiKey: "AIzaSyB4wW9n5kkPq2TkaYjFxWZxzrNHOUft0sI",
@@ -351,23 +350,27 @@ onSnapshot(_docRef, (snap) => {
 
 const _storage = getStorage(_fbApp);
 
-// Upload PDF attachment for a recon key
+// Upload PDF: legge il file come base64 e lo salva in Firestore (no Storage)
+// Limite: 500KB → ~685KB base64, ben sotto il limite 1MB di Firestore
 window._fbUploadPDF = async (reconKey, file) => {
-  const safeName = Date.now() + '_' + file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-  const path = `attachments/${reconKey}/${safeName}`;
-  const storageRef = ref(_storage, path);
-  await uploadBytes(storageRef, file, { contentType: 'application/pdf' });
-  const url = await getDownloadURL(storageRef);
-  return { name: file.name, path, url, uploadedAt: Date.now() };
+  const base64 = await new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload = e => res(e.target.result);
+    r.onerror = rej;
+    r.readAsDataURL(file);
+  });
+  const safeKey = reconKey.replace(/[^a-zA-Z0-9_-]/g, '_');
+  const docId = safeKey + '_' + Date.now();
+  await setDoc(doc(_db, 'attach_data', docId), { reconKey, name: file.name, data: base64, uploadedAt: Date.now() });
+  return { name: file.name, docId, uploadedAt: Date.now() };
 };
 
-// Delete a PDF attachment
-window._fbDeletePDF = async (path) => {
-  const storageRef = ref(_storage, path);
-  await deleteObject(storageRef);
+// Elimina un allegato (documento Firestore)
+window._fbDeletePDF = async (docId) => {
+  await deleteDoc(doc(_db, 'attach_data', docId));
 };
 
-// List attachments for a recon key (from Firestore metadata)
+// Legge la lista allegati (solo metadati, senza base64)
 window._fbGetAttachments = async (reconKey) => {
   try {
     const d = await getDoc(doc(_db, 'attachments', reconKey.replace(/[^a-zA-Z0-9_-]/g, '_')));
@@ -375,10 +378,17 @@ window._fbGetAttachments = async (reconKey) => {
   } catch { return []; }
 };
 
-// Save attachment metadata to Firestore
+// Salva la lista allegati (metadati)
 window._fbSaveAttachments = async (reconKey, files) => {
   const safeKey = reconKey.replace(/[^a-zA-Z0-9_-]/g, '_');
   await setDoc(doc(_db, 'attachments', safeKey), { files, updatedAt: Date.now() });
+};
+
+// Recupera il base64 di un allegato per aprirlo/scaricarlo
+window._fbOpenAttachment = async (docId) => {
+  const d = await getDoc(doc(_db, 'attach_data', docId));
+  if (!d.exists()) throw new Error('Allegato non trovato');
+  return d.data().data; // data URL base64
 };
 
 window._fbReady = true;
@@ -3688,25 +3698,48 @@ async function loadReconAttachments() {
   renderAttachments(files);
 }
 
+let _attachFiles = [];
+
 function renderAttachments(files) {
+  _attachFiles = files || [];
   const el = document.getElementById('recon-attachments');
   if (!el) return;
-  if (!files || !files.length) {
+  if (!_attachFiles.length) {
     el.innerHTML = '<p style="color:#a8a29e;font-size:12px;text-align:center;padding:8px 0">Nessun allegato.</p>';
     return;
   }
-  el.innerHTML = files.map((f,i) => `
+  el.innerHTML = _attachFiles.map((f,i) => `
     <div style="display:flex;align-items:center;gap:8px;padding:6px 4px;border-bottom:1px solid #f1f5f9">
       <span style="font-size:18px;flex-shrink:0">📄</span>
       <span style="flex:1;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(f.name)}">${esc(f.name)}</span>
       <span style="font-size:10px;color:#94a3b8;flex-shrink:0">${new Date(f.uploadedAt).toLocaleDateString('it-IT')}</span>
-      <a href="${esc(f.url)}" target="_blank" title="Apri PDF"
-         style="padding:3px 7px;border-radius:5px;background:#eff6ff;color:#1e40af;border:1px solid #bfdbfe;font-size:11px;text-decoration:none;flex-shrink:0">👁 Apri</a>
-      <a href="${esc(f.url)}" download="${esc(f.name)}" title="Scarica"
-         style="padding:3px 7px;border-radius:5px;background:#f0fdf4;color:#166534;border:1px solid #bbf7d0;font-size:11px;text-decoration:none;flex-shrink:0">⬇</a>
+      <button onclick="openAttachment(${i})" title="Apri PDF"
+         style="padding:3px 7px;border-radius:5px;background:#eff6ff;color:#1e40af;border:1px solid #bfdbfe;font-size:11px;cursor:pointer;flex-shrink:0">👁 Apri</button>
+      <button onclick="downloadAttachment(${i})" title="Scarica"
+         style="padding:3px 7px;border-radius:5px;background:#f0fdf4;color:#166534;border:1px solid #bbf7d0;font-size:11px;cursor:pointer;flex-shrink:0">⬇</button>
       <button onclick="deleteReconPDF(${i})" title="Elimina"
          style="padding:3px 7px;border-radius:5px;background:#fff;color:#dc2626;border:1px solid #fecaca;font-size:11px;cursor:pointer;flex-shrink:0">🗑</button>
     </div>`).join('');
+}
+
+async function openAttachment(i) {
+  const f = _attachFiles[i]; if (!f) return;
+  showMsg('msg-attach','ok','⏳ Apertura...');
+  try {
+    const dataUrl = await window._fbOpenAttachment(f.docId);
+    const w = window.open(); w.document.write(`<iframe src="${dataUrl}" style="width:100%;height:100%;border:none"></iframe>`);
+    showMsg('msg-attach','','');
+  } catch(e) { showMsg('msg-attach','err','Errore: '+e.message); }
+}
+
+async function downloadAttachment(i) {
+  const f = _attachFiles[i]; if (!f) return;
+  showMsg('msg-attach','ok','⏳ Download...');
+  try {
+    const dataUrl = await window._fbOpenAttachment(f.docId);
+    const a = document.createElement('a'); a.href = dataUrl; a.download = f.name; a.click();
+    showMsg('msg-attach','','');
+  } catch(e) { showMsg('msg-attach','err','Errore: '+e.message); }
 }
 
 async function uploadReconPDF(inp) {
@@ -3721,7 +3754,7 @@ async function uploadReconPDF(inp) {
     const uploaded = [];
     for (const file of files) {
       if (file.type !== 'application/pdf') { showMsg('msg-attach','err','Solo file PDF.'); continue; }
-      if (file.size > 10 * 1024 * 1024) { showMsg('msg-attach','err',file.name+' supera 10MB.'); continue; }
+      if (file.size > 500 * 1024) { showMsg('msg-attach','err',file.name+' supera 500KB (limite Firestore).'); continue; }
       const meta = await window._fbUploadPDF(key, file);
       uploaded.push(meta);
     }
@@ -3740,7 +3773,7 @@ async function deleteReconPDF(idx) {
     const key = _reconAttachKey();
     const files = await window._fbGetAttachments(key);
     const f = files[idx];
-    await window._fbDeletePDF(f.path);
+    await window._fbDeletePDF(f.docId);
     files.splice(idx, 1);
     await window._fbSaveAttachments(key, files);
     renderAttachments(files);
