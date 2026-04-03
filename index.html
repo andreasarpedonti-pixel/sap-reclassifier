@@ -2481,9 +2481,13 @@ function rRptTable() {
       S.coa.forEach(a=>{
         const m2=S.mapping[a.id]; if(!m2) return;
         const kD=mapKey==='civ'?'civD':'corpD', kC=mapKey==='civ'?'civC':'corpC';
-        const r1=resolveNode(struct,m2[kD]), r2=resolveNode(struct,m2[kC]);
-        if(r1!==node.id && r2!==node.id) return;
-        const aBals=cols.map(c=>colBalance(c,a.id));
+        // Per ogni colonna determina il nodo target in base al segno del saldo
+        // (stessa logica di nodeTotal) — mostra il valore solo se appartiene a questo nodo
+        const aBals=cols.map(c=>{
+          const v=colBalance(c,a.id);
+          const rawTarget=v>=0?(m2[kD]||m2[kC]):(m2[kC]||m2[kD]);
+          return resolveNode(struct,rawTarget)===node.id ? v : 0;
+        });
         if(!aBals.some(v=>v!==0)) return;
         const hAcc = isColl || hidden;
         accRowsHtml.push(`<tr class="r-acc${hAcc?' r-hidden':''}" data-acc="1" data-par="${esc(node.id)}">
