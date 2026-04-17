@@ -3070,6 +3070,8 @@ function expRptXLSX() {
 
     if (!node.totEnd) { doDetails(); children.forEach(c=>addXlNode(c,lv+1)); }
     else              { children.forEach(c=>addXlNode(c,lv+1)); doDetails(); }
+    // riga vuota separatrice dopo ogni sezione di primo livello
+    if (lv===0) xlRows.push({ol:0, cells:[]});
   }
 
   struct.filter(n=>!n.parentId).forEach(n=>addXlNode(n,0));
